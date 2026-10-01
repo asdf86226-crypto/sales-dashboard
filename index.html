@@ -157,10 +157,14 @@
   .modal textarea { width:100%; height:220px; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--page); color:var(--text-1); resize:vertical; }
   .modal .row { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
   .modal .steps { margin:0 0 12px; padding-left:18px; font-size:12px; color:var(--text-2); line-height:1.75; }
-  .modal input[type=url] { width:100%; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+  .modal input[type=url], .modal input[type=text] { width:100%; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
     border:1px solid var(--border); border-radius:8px; padding:9px 10px; background:var(--page); color:var(--text-1); }
   .modal .warn-note { background:color-mix(in srgb, var(--bad) 9%, transparent); border:1px solid color-mix(in srgb, var(--bad) 28%, transparent);
     border-radius:8px; padding:9px 11px; color:var(--text-2); margin:0 0 12px; }
+  .modal .ok-note { background:color-mix(in srgb, var(--good) 9%, transparent); border:1px solid color-mix(in srgb, var(--good) 26%, transparent);
+    border-radius:8px; padding:9px 11px; color:var(--text-2); font-size:12px; margin:0 0 12px; }
+  .modal .steps a { color:var(--series-1); }
+  .modal .row { flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -178,7 +182,7 @@
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
       <input type="file" id="taxoInput" accept=".xlsx,.xls,.csv" hidden>
       <button class="btn" id="uploadBtn">📂 엑셀/CSV 업로드</button>
-      <button class="btn ghost" id="linkBtn">🔗 구글시트 연결</button>
+      <button class="btn ghost" id="linkBtn">🔗 드라이브 연결</button>
       <button class="btn ghost" id="taxoBtn">🏷 분류기준</button>
       <button class="btn ghost" id="reportBtn">📤 보고용 공유</button>
       <button class="btn ghost" id="copyBtn">📋 표 복사</button>
@@ -297,21 +301,26 @@
 
 <div class="modal-bg" id="linkModal">
   <div class="modal">
-    <h3>구글시트에서 자동으로 가져오기</h3>
-    <p>판매현황을 <b>구글시트</b>로 만들어 <b>웹에 게시</b>하면, 시트를 고칠 때마다 이 대시보드가
-       알아서 최신 내용을 받아옵니다. 파일을 올리지 않아도 됩니다.</p>
+    <h3>구글 드라이브에서 자동으로 가져오기</h3>
+    <p>연결해 두면 <b>드라이브 폴더에 판매현황 파일을 덮어쓰기만</b> 하면 됩니다.
+       대시보드를 열 때마다 알아서 최신 파일을 받아옵니다. 구매요청 대시보드와 같은 방식입니다.</p>
     <ol class="steps">
-      <li>판매현황 엑셀을 구글 드라이브에 올리고 <b>더블클릭 → 구글 시트로 열기</b></li>
-      <li>시트에서 <b>파일 → 공유 → 웹에 게시</b></li>
-      <li>왼쪽에서 해당 시트를 고르고, 오른쪽 형식을 <b>쉼표로 구분된 값(.csv)</b> 로 바꾼 뒤 <b>게시</b></li>
-      <li>나오는 주소를 복사해서 아래에 붙여넣기</li>
+      <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> 에서 <b>새 프로젝트</b> 만들기</li>
+      <li>아래 <b>📋 스크립트 복사</b> 를 눌러 받은 코드를 붙여넣고 저장</li>
+      <li>함수 목록에서 <b>설정</b> 을 골라 <b>▷ 실행</b> (권한 승인)
+          → 실행 로그에 <b>열쇠</b>가 나옵니다</li>
+      <li><b>배포 → 새 배포 → 웹 앱</b>, 실행 계정 <b>나</b> / 액세스 <b>모든 사용자</b> → 배포</li>
+      <li>나온 <b>웹 앱 URL</b> 과 <b>열쇠</b> 를 아래에 붙여넣기</li>
     </ol>
-    <p class="warn-note">⚠ <b>웹에 게시하면 주소를 아는 사람은 누구나 볼 수 있습니다.</b>
-       주소를 아무 데도 올리지 마세요. 그만두려면 같은 화면에서 <b>게시 중지</b>를 누르면 됩니다.</p>
+    <p class="ok-note">🔒 열쇠는 스크립트에만 있고 이 대시보드 저장소에는 없습니다.
+       <b>열쇠가 없으면 주소를 알아도 데이터를 받아갈 수 없습니다.</b></p>
     <input id="linkUrl" type="url" spellcheck="false" autocomplete="off"
-           placeholder="https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv">
+           placeholder="웹 앱 URL — https://script.google.com/macros/s/AKfy.../exec">
+    <input id="linkKey" type="text" spellcheck="false" autocomplete="off" style="margin-top:8px"
+           placeholder="열쇠 — 실행 로그에 나온 긴 문자열">
     <p class="meta" id="linkStatus"></p>
     <div class="row">
+      <button class="btn ghost" id="linkCopyScript">📋 스크립트 복사</button>
       <button class="btn ghost" id="linkRemove">연결 끊기</button>
       <button class="btn ghost" id="linkClose">닫기</button>
       <button class="btn" id="linkSave">연결하고 가져오기</button>
@@ -331,6 +340,212 @@
   </div>
 </div>
 
+
+<script type="text/plain" id="feedScript">/**
+ * 판매현황 배달부 (Google Apps Script)
+ * ------------------------------------------------------------------
+ * 구글 드라이브 폴더에 있는 판매현황 파일을 읽어 대시보드에 그대로 넘겨준다.
+ * 드라이브에 파일만 덮어쓰면 대시보드가 알아서 최신 내용을 받아간다.
+ *
+ * 최초 1회
+ *   1) script.google.com → 새 프로젝트 → 이 코드를 전부 붙여넣고 저장
+ *   2) 함수 목록에서 [설정] 을 골라 실행 (구글 권한 승인 필요)
+ *      → 실행 로그에 "폴더 주소" 와 "열쇠" 가 나온다
+ *   3) 배포 → 새 배포 → 유형: 웹 앱
+ *        실행 계정: 나
+ *        액세스 권한: 모든 사용자          ← 열쇠로 막으므로 이렇게 둬야 한다
+ *      → 배포 후 나오는 웹 앱 URL 복사
+ *   4) 대시보드 [🔗 드라이브 연결] 에 URL 과 열쇠를 붙여넣기
+ *
+ * 그다음부터는 드라이브 폴더에 판매현황 파일을 덮어쓰기만 하면 된다.
+ *
+ * 주의: 열쇠는 이 스크립트 속성에만 있고 대시보드 저장소에는 없다.
+ *       열쇠가 없으면 URL 을 알아도 아무것도 받아갈 수 없다.
+ */
+
+var FOLDER_NAME = '구매요청 ERP 자료';   // 구매요청 대시보드가 만들어 둔 폴더
+var P = PropertiesService.getScriptProperties();
+
+/** 최초 1회 실행 — 폴더를 찾고 열쇠를 만든다 */
+function 설정() {
+  var f = 폴더_();
+  var key = P.getProperty('SALES_KEY');
+  if (!key) { key = Utilities.getUuid().replace(/-/g, ''); P.setProperty('SALES_KEY', key); }
+
+  var picked = '';
+  try { var hit = 판매파일_(f); picked = hit ? (hit.getName() + ' (' + 날짜_(hit.getLastUpdated()) + ' 수정)') : '못 찾음'; }
+  catch (e) { picked = '확인 실패 — ' + e.message; }
+
+  var m = '[준비 끝]\n\n폴더 : ' + f.getUrl()
+        + '\n판매현황 파일 : ' + picked
+        + '\n\n열쇠 : ' + key
+        + '\n\n이제 [배포 → 새 배포 → 웹 앱] 으로 배포하고,'
+        + '\n웹 앱 URL 과 위 열쇠를 대시보드에 넣으세요.';
+  Logger.log(m);
+  return m;
+}
+
+/** 열쇠를 새로 만든다(유출됐을 때). 대시보드에 새 열쇠를 다시 넣어야 한다. */
+function 열쇠_새로만들기() {
+  var key = Utilities.getUuid().replace(/-/g, '');
+  P.setProperty('SALES_KEY', key);
+  Logger.log('새 열쇠 : ' + key + '\n\n대시보드에 다시 넣어주세요. 이전 열쇠는 즉시 막힙니다.');
+  return key;
+}
+
+function doGet(e) {
+  var p = (e &amp;&amp; e.parameter) || {};
+  try {
+    if (p.key !== P.getProperty('SALES_KEY')) return 응답_(p.callback, { ok: false, error: '열쇠가 맞지 않습니다.' });
+
+    var f = 폴더_();
+    var file = 판매파일_(f);
+    if (!file) return 응답_(p.callback, { ok: false, error: '폴더에서 판매현황 파일을 찾지 못했습니다. 파일 이름에 "판매" 를 넣어주세요.' });
+
+    var meta = { ok: true, name: file.getName(), updated: file.getLastUpdated().getTime(), folder: f.getUrl() };
+    if (p.sales === 'meta') return 응답_(p.callback, meta);          // 바뀌었는지만 싸게 확인
+
+    var rows = 행읽기_(file);
+    if (!rows || !rows.length) return 응답_(p.callback, { ok: false, error: '파일에서 읽을 내용이 없습니다.' });
+    meta.rows = rows;
+    meta.n = rows.length;
+    return 응답_(p.callback, meta);
+  } catch (err) {
+    return 응답_(p.callback, { ok: false, error: String(err &amp;&amp; err.message || err) });
+  }
+}
+
+/* ---------- 폴더 · 파일 찾기 ---------- */
+function 폴더_() {
+  var id = P.getProperty('SALES_FOLDER');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var it = DriveApp.getFoldersByName(FOLDER_NAME);
+  if (!it.hasNext()) throw new Error('"' + FOLDER_NAME + '" 폴더를 찾지 못했습니다.');
+  var f = it.next();
+  P.setProperty('SALES_FOLDER', f.getId());
+  return f;
+}
+
+/** 이름에 판매·매출이 들어간 파일을 고르고, 같은 점수면 최근에 고친 것을 쓴다 */
+function 판매파일_(folder) {
+  var it = folder.getFiles(), best = null, bestScore = -1;
+  while (it.hasNext()) {
+    var f = it.next(), nm = f.getName();
+    if (nm.charAt(0) === '~') continue;                       // 엑셀 임시파일
+    if (!/\.(xlsx|csv|tsv|txt)$/i.test(nm) &amp;&amp;
+        f.getMimeType() !== 'application/vnd.google-apps.spreadsheet') continue;
+    var s = /판매|매출|sales/i.test(nm) ? 2 : 0;
+    if (/현황|내역/.test(nm)) s += 1;
+    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) s -= 5;   // 다른 용도 파일
+    if (s &lt; 0) continue;
+    if (s &gt; bestScore || (s === bestScore &amp;&amp; best &amp;&amp; f.getLastUpdated() &gt; best.getLastUpdated())) {
+      best = f; bestScore = s;
+    }
+  }
+  return best;
+}
+
+/* ---------- 파일 읽기 (구매요청 대시보드와 같은 방식) ---------- */
+function 행읽기_(f) {
+  var mt = f.getMimeType(), nm = f.getName(), low = nm.toLowerCase();
+  if (mt === 'application/vnd.google-apps.spreadsheet')
+    return SpreadsheetApp.openById(f.getId()).getSheets()[0].getDataRange().getDisplayValues();
+  if (/\.(csv|tsv|txt)$/.test(low) || mt === 'text/csv' || mt === 'text/plain')
+    return Utilities.parseCsv(f.getBlob().getDataAsString('UTF-8').replace(/^﻿/, ''));
+  if (/\.xlsx$/.test(low) || mt === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return xlsx_(f.getBlob());
+  if (/\.xls$/.test(low)) throw new Error('옛 .xls 형식입니다 — .xlsx 나 CSV 로 저장해 주세요');
+  throw new Error('읽을 수 없는 형식입니다: ' + nm);
+}
+
+// .xlsx 는 zip 이다. 드라이브 변환을 거치지 않고 여기서 바로 풀어 읽는다.
+function xlsx_(blob) {
+  var parts;
+  try { parts = Utilities.unzip(blob.setContentType('application/zip')); }
+  catch (e) { throw new Error('엑셀 파일을 여는 데 실패했습니다 — CSV 로 저장해 올려주세요'); }
+  var map = {};
+  for (var i = 0; i &lt; parts.length; i++) map[parts[i].getName()] = parts[i];
+  var get = function (n) { return map[n] ? map[n].getDataAsString('UTF-8') : ''; };
+
+  // 공유 문자열
+  var shared = [], ssx = get('xl/sharedStrings.xml');
+  if (ssx) {
+    var si = /&lt;si\b[^&gt;]*&gt;([\s\S]*?)&lt;\/si&gt;/g, m;
+    while ((m = si.exec(ssx))) {
+      var s = '', t = /&lt;t\b[^&gt;]*&gt;([\s\S]*?)&lt;\/t&gt;/g, x;
+      while ((x = t.exec(m[1]))) s += x[1];
+      shared.push(unesc_(s));
+    }
+  }
+  // 날짜 서식 (cellStyleXfs 가 아니라 cellXfs 안의 xf 만)
+  var dateStyle = [], stx = get('xl/styles.xml');
+  if (stx) {
+    var fmt = {}, fr = /&lt;numFmt\b[^&gt;]*numFmtId="(\d+)"[^&gt;]*formatCode="([^"]*)"/g, f2;
+    while ((f2 = fr.exec(stx))) fmt[f2[1]] = unesc_(f2[2]);
+    var isDate = function (id) {
+      var k = +id; if ((k &gt;= 14 &amp;&amp; k &lt;= 22) || (k &gt;= 45 &amp;&amp; k &lt;= 47)) return true;
+      var c = fmt[id];
+      return c ? /[dmy]/i.test(c.replace(/\[[^\]]*\]/g, '').replace(/"[^"]*"/g, '')) : false;
+    };
+    var cx = stx.match(/&lt;cellXfs\b[\s\S]*?&lt;\/cellXfs&gt;/);
+    if (cx) { var xr = /&lt;xf\b[^&gt;]*&gt;/g, xx, i2 = 0;
+      while ((xx = xr.exec(cx[0]))) { var id = (xx[0].match(/numFmtId="(\d+)"/) || [])[1] || '0'; dateStyle[i2++] = isDate(id); } }
+  }
+  var names = [];
+  for (var k in map) if (/^xl\/worksheets\/sheet\d+\.xml$/.test(k)) names.push(k);
+  if (!names.length) throw new Error('워크시트를 찾을 수 없습니다');
+  names.sort();
+
+  var xml = get(names[0]), rows = [];
+  var rr = /&lt;row\b[^&gt;]*&gt;([\s\S]*?)&lt;\/row&gt;/g, cr = /&lt;c\b([^&gt;]*?)(?:\/&gt;|&gt;([\s\S]*?)&lt;\/c&gt;)/g, r;
+  while ((r = rr.exec(xml))) {
+    var cells = [], c; cr.lastIndex = 0;
+    while ((c = cr.exec(r[1]))) {
+      var at = c[1] || '', body = c[2] || '';
+      var ref = (at.match(/r="([A-Z]+)/) || [])[1] || '';
+      var tt = (at.match(/t="([^"]*)"/) || [])[1] || '';
+      var st = (at.match(/s="(\d+)"/) || [])[1];
+      var col; if (ref) { col = 0; for (var q = 0; q &lt; ref.length; q++) col = col * 26 + (ref.charCodeAt(q) - 64); col--; } else col = cells.length;
+      var val = '';
+      if (tt === 's') { var v = (body.match(/&lt;v&gt;([\s\S]*?)&lt;\/v&gt;/) || [])[1]; val = shared[+v] || ''; }
+      else if (tt === 'inlineStr') { var s2 = '', tr = /&lt;t\b[^&gt;]*&gt;([\s\S]*?)&lt;\/t&gt;/g, tm;
+        while ((tm = tr.exec(body))) s2 += tm[1]; val = unesc_(s2); }
+      else { var v2 = (body.match(/&lt;v&gt;([\s\S]*?)&lt;\/v&gt;/) || [])[1];
+        var raw = (v2 == null) ? '' : unesc_(v2);
+        val = (raw !== '' &amp;&amp; st != null &amp;&amp; dateStyle[+st]) ? serial_(+raw) : raw; }
+      cells[col] = val;
+    }
+    for (var j = 0; j &lt; cells.length; j++) if (cells[j] == null) cells[j] = '';
+    rows.push(cells);
+  }
+  return rows;
+}
+
+function unesc_(s) {
+  if (s.indexOf('&amp;') &lt; 0) return s;
+  return s.replace(/&amp;(lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, function (m, e) {
+    if (e === 'lt') return '&lt;'; if (e === 'gt') return '&gt;'; if (e === 'amp') return '&amp;';
+    if (e === 'quot') return '"'; if (e === 'apos') return "'";
+    if (e.charAt(0) === '#') { var n = e.charAt(1) === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1);
+      return isFinite(n) ? String.fromCharCode(n) : m; }
+    return m;
+  });
+}
+function serial_(n) {
+  var d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+  return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+}
+function 날짜_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'); }
+
+/* ---------- 응답 ----------
+ * 브라우저가 CORS 로 막는 경우를 대비해 JSONP(callback) 도 함께 지원한다. */
+function 응답_(callback, obj) {
+  var body = JSON.stringify(obj);
+  if (callback) return ContentService.createTextOutput(callback + '(' + body + ')')
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
+}
+</script>
 <script src="./vendor/xlsx.min.js"></script>
 <script>
 /* ================================================================
@@ -1295,86 +1510,111 @@ $('#copyModalCopy').addEventListener('click', ()=>{
 });
 $('#fileInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readFile(f); e.target.value=''; });
 $('#linkBtn').addEventListener('click', async ()=>{
-  $('#linkUrl').value = (await loadLink()) || '';
-  setLinkStatus('');
+  const c = await loadLink();
+  $('#linkUrl').value = c ? c.url : '';
+  $('#linkKey').value = c ? c.key : '';
+  setLinkStatus(c ? `연결됨${c.name ? ' — ' + c.name : ''}` : '');
   $('#linkModal').classList.add('open');
   $('#linkUrl').focus();
 });
 $('#linkClose').addEventListener('click', ()=>$('#linkModal').classList.remove('open'));
 $('#linkModal').addEventListener('click', e=>{ if(e.target===$('#linkModal')) $('#linkModal').classList.remove('open'); });
 $('#linkRemove').addEventListener('click', async ()=>{
-  await clearLink(); $('#linkUrl').value=''; setLinkStatus('연결을 끊었습니다. 올려둔 데이터는 그대로 있습니다.');
+  await clearLink(); $('#linkUrl').value=''; $('#linkKey').value='';
+  setLinkStatus('연결을 끊었습니다. 받아둔 데이터는 그대로 있습니다.');
+});
+$('#linkCopyScript').addEventListener('click', async ()=>{
+  const code = $('#feedScript').textContent;
+  try { await navigator.clipboard.writeText(code); setLinkStatus('📋 스크립트를 복사했습니다. Apps Script 에 붙여넣으세요.'); }
+  catch (e) {
+    // 클립보드가 막힌 경우: 복사 창을 띄워 직접 Ctrl+C 하게 한다
+    $('#copyArea').value = code; $('#copyModal').classList.add('open');
+    $('#copyArea').focus(); $('#copyArea').select();
+  }
 });
 $('#linkSave').addEventListener('click', async ()=>{
-  const n = normalizeSheetUrl($('#linkUrl').value);
+  const n = checkWebAppUrl($('#linkUrl').value);
   if (n.error) { setLinkStatus('⚠ ' + n.error.split('\n')[0]); alert(n.error); return; }
-  if (n.note) setLinkStatus(n.note);
-  if (await pullFromSheet(n.url, true)) { await saveLink(n.url); $('#linkUrl').value = n.url; }
+  const key = $('#linkKey').value.trim();
+  if (!key) { setLinkStatus('⚠ 열쇠를 넣어주세요.'); alert('열쇠를 넣어주세요.\n\nApps Script 에서 [설정] 을 실행하면 실행 로그에 나옵니다.'); return; }
+  await pullFromDrive({ url: n.url, key }, false);
 });
 $('#taxoBtn').addEventListener('click', ()=>$('#taxoInput').click());
 $('#taxoInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readTaxonomyFile(f); e.target.value=''; });
 $('#sampleBtn').addEventListener('click', ()=>{ RAW=makeSampleData(); window.__lastMapping='<b>샘플 데이터</b> (상품 6종 · 거래처 6곳)'; setupDims(); render('샘플 데이터 (상품 6종 · 거래처 6곳 · 약 18개월)'); });
 window.addEventListener('resize', ()=>render());
 
-/* ---------- 구글시트 연결 ----------
- * "웹에 게시 → CSV" 주소에서 판매현황을 직접 받아온다.
- * 구글 드라이브의 일반 공유 링크(drive.google.com/.../view)는 다른 사이트에서 읽는 걸
- * 막아 두어(CORS) 쓸 수 없다. 게시된 CSV 주소만 브라우저가 가져올 수 있다. */
-function normalizeSheetUrl(raw) {
+/* ---------- 구글 드라이브 연결 ----------
+ * 드라이브 폴더의 판매현황 파일을 Apps Script 웹 앱이 읽어서 넘겨준다.
+ * (드라이브 공유 링크는 다른 사이트에서 읽는 걸 구글이 막아 두어 직접은 못 가져온다)
+ * 구매요청 대시보드와 같은 구조이며, 열쇠(key)로 막아 주소만으로는 받아갈 수 없다. */
+function checkWebAppUrl(raw) {
   const u = String(raw || '').trim();
-  if (!u) return { error:'주소를 붙여넣어 주세요.' };
-  if (/drive\.google\.com\/file\//.test(u) || /[?&]id=/.test(u) && /drive\.google\.com/.test(u))
-    return { error:'드라이브 파일 링크는 브라우저가 가져올 수 없습니다.\n\n구글시트로 연 뒤 ' +
-                   '[파일 → 공유 → 웹에 게시 → 쉼표로 구분된 값(.csv)] 주소를 넣어주세요.' };
-  if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(u))
-    return { error:'구글시트 "웹에 게시" 주소가 아닙니다.\n\nhttps://docs.google.com/spreadsheets/... 로 시작해야 합니다.' };
-  // 게시 주소는 /pub, /pubhtml 둘 다로 복사된다. 어느 쪽이든 CSV 로 바꾼다.
-  const pub = u.match(/^(https:\/\/docs\.google\.com\/spreadsheets\/d\/e\/[^/]+)\/pub(?:html)?(\?[^#]*)?/);
-  if (pub) {
-    const qs = new URLSearchParams(pub[2] || '');
-    qs.set('output', 'csv');
-    qs.delete('single'); qs.delete('widget'); qs.delete('headers');   // html 전용 인자
-    return { url: `${pub[1]}/pub?${qs}` };
-  }
-  const m = u.match(/\/spreadsheets\/d\/(?!e\/)([^/]+)/);
-  if (m) {
-    const gid = (u.match(/[#&?]gid=(\d+)/) || [])[1];
-    return { url: `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv` + (gid ? `&gid=${gid}` : ''),
-             note: '일반 시트 주소라 내보내기 형태로 바꿨습니다. 가져오지 못하면 "웹에 게시" 주소를 써주세요.' };
-  }
-  return { error:'주소에서 시트를 찾지 못했습니다.' };
+  if (!u) return { error:'웹 앱 URL 을 붙여넣어 주세요.' };
+  if (/docs\.google\.com|drive\.google\.com/.test(u))
+    return { error:'드라이브·시트 주소가 아니라 Apps Script 웹 앱 URL 이 필요합니다.\n\n' +
+                   '[배포 → 새 배포 → 웹 앱] 후 나오는 https://script.google.com/macros/s/.../exec 를 넣어주세요.' };
+  if (!/^https:\/\/script\.google(usercontent)?\.com\/macros\//.test(u))
+    return { error:'Apps Script 웹 앱 URL 이 아닙니다.\n\nhttps://script.google.com/macros/s/... 로 시작해야 합니다.' };
+  if (!/\/exec\b/.test(u))
+    return { error:'주소가 /exec 로 끝나야 합니다.\n\n/dev 주소는 본인만 열 수 있어 쓸 수 없습니다.' };
+  return { url: u.split('?')[0] };
 }
-async function fetchSheet(url) {
-  let res;
+/* Apps Script 는 googleusercontent 로 한 번 넘기는데 그 과정에서 CORS 가 막히는 브라우저가 있다.
+ * 구매요청 대시보드처럼 먼저 fetch 를 쓰고, 막히면 JSONP(script 태그)로 한 번 더 시도한다. */
+function jsonpGet(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const cb = '__sales_cb_' + Math.random().toString(36).slice(2);
+    const s = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('응답이 없습니다(시간 초과).')); }, timeoutMs || 60000);
+    function cleanup() { clearTimeout(timer); delete window[cb]; s.remove(); }
+    window[cb] = (data) => { cleanup(); resolve(data); };
+    s.onerror = () => { cleanup(); reject(new Error('스크립트를 불러오지 못했습니다.')); };
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+async function askFeed(url, key, what) {
+  const q = `${url}?sales=${what}&key=${encodeURIComponent(key)}&t=${Date.now()}`;
+  let data = null;
   try {
-    res = await fetch(url, { redirect:'follow', cache:'no-store' });
+    const res = await fetch(q, { method:'GET', mode:'cors', credentials:'omit', redirect:'follow', cache:'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
   } catch (e) {
-    // CORS 차단과 네트워크 장애는 브라우저가 구분해 주지 않는다. 둘 다 안내한다.
-    throw new Error('가져오지 못했습니다. 시트가 "웹에 게시" 되어 있는지 확인해 주세요.\n' +
-                    '(일반 공유 링크는 다른 사이트에서 읽을 수 없습니다)');
+    data = await jsonpGet(q);                 // CORS 로 막힌 경우
   }
-  if (!res.ok) throw new Error(`구글이 ${res.status} 를 돌려줬습니다. 게시가 중지됐거나 주소가 바뀌지 않았는지 확인해 주세요.`);
-  const text = await res.text();
-  if (/^\s*<(!doctype|html)/i.test(text))
-    throw new Error('CSV 대신 웹페이지가 왔습니다. 게시 형식을 "쉼표로 구분된 값(.csv)" 으로 바꿔주세요.');
-  return text;
+  if (!data) throw new Error('빈 응답이 왔습니다.');
+  if (data.ok === false) throw new Error(data.error || '알 수 없는 오류');
+  return data;
 }
-async function pullFromSheet(url, quiet) {
+async function pullFromDrive(conn, quiet) {
+  const { url, key } = conn;
   try {
-    setLinkStatus('가져오는 중…');
-    const text = await fetchSheet(url);
-    const { data, mapping } = ingestRows(parseCSVtoRows(text));
+    setLinkStatus('드라이브를 확인하는 중…');
+    const meta = await askFeed(url, key, 'meta');
+    // 파일이 그대로면 다시 받지 않는다(수만 행을 매번 내려받지 않도록)
+    if (!quiet && conn.updated && meta.updated === conn.updated && RAW.length) {
+      setLinkStatus(`이미 최신입니다 — ${meta.name}`);
+      return true;
+    }
+    if (quiet && conn.updated && meta.updated === conn.updated && RAW.length) return true;
+
+    setLinkStatus(`${meta.name} 가져오는 중…`);
+    const full = await askFeed(url, key, 'data');
+    const { data, mapping } = ingestRows(full.rows);
     RAW = data;
-    window.__fname = '구글시트';
+    window.__fname = full.name;
     setupDims();
-    render(mapping, '구글시트');
-    await saveData('구글시트');
-    showSavedNote(Date.now(), '구글시트');
-    setLinkStatus(`✅ ${KRW.format(data.length)}건 가져왔습니다.`);
+    render(mapping, full.name);
+    await saveData(full.name);
+    showSavedNote(Date.now(), full.name);
+    await saveLink({ url, key, updated: full.updated, name: full.name });
+    setLinkStatus(`✅ ${KRW.format(data.length)}건 가져왔습니다 — ${full.name}`);
     return true;
   } catch (err) {
     setLinkStatus('⚠ ' + err.message);
-    if (!quiet) alert('구글시트 가져오기 실패\n\n' + err.message);
+    if (!quiet) alert('드라이브 가져오기 실패\n\n' + err.message);
     return false;
   }
 }
@@ -1537,20 +1777,20 @@ function showSavedNote(savedAt, fname) {
   });
 }
 
-/* 연결한 구글시트 주소도 같은 DB에 보관한다. 저장소에는 넣지 않는다. */
-const LINK_KEY = 'sheetLink';
-async function saveLink(url) {
+/* 연결 정보(웹 앱 주소·열쇠)도 같은 DB에 보관한다. 저장소에는 넣지 않는다. */
+const LINK_KEY = 'driveLink';
+async function saveLink(conn) {
   try { const db = await idbOpen();
     await new Promise(res => { const tx = db.transaction(STORE,'readwrite');
-      tx.objectStore(STORE).put({ url, savedAt: Date.now() }, LINK_KEY); tx.oncomplete = res; });
+      tx.objectStore(STORE).put({ ...conn, savedAt: Date.now() }, LINK_KEY); tx.oncomplete = res; });
     db.close();
-  } catch (e) { console.warn('주소 보관 실패:', e); }
+  } catch (e) { console.warn('연결 정보 보관 실패:', e); }
 }
 async function loadLink() {
   try { const db = await idbOpen();
     const got = await new Promise((res, rej) => { const tx = db.transaction(STORE,'readonly');
       const q = tx.objectStore(STORE).get(LINK_KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
-    db.close(); return got && got.url ? got.url : null;
+    db.close(); return (got && got.url && got.key) ? got : null;
   } catch (e) { return null; }
 }
 async function clearLink() {
@@ -1605,13 +1845,13 @@ async function clearTaxonomy() {
     setupDims();
     render(null, saved.fname);
     showSavedNote(saved.savedAt, saved.fname);
-    // 시트를 연결해 뒀다면 백그라운드로 최신 내용을 받아 덮어쓴다.
+    // 드라이브를 연결해 뒀다면 백그라운드로 최신 파일을 받아 덮어쓴다.
     // 실패해도 보관본이 이미 그려져 있으므로 조용히 넘어간다.
-    const url = await loadLink();
-    if (url) pullFromSheet(url, true);
+    const conn = await loadLink();
+    if (conn) pullFromDrive(conn, true);
   } else {
-    const url = await loadLink();
-    if (url && await pullFromSheet(url, true)) return;   // 연결돼 있으면 샘플 대신 시트를 쓴다
+    const conn = await loadLink();
+    if (conn && await pullFromDrive(conn, true)) return;   // 연결돼 있으면 샘플 대신 드라이브를 쓴다
     RAW = makeSampleData();
     window.__lastMapping = '<b>샘플 데이터</b> — 상단의 “엑셀/CSV 업로드”로 이카운트 판매현황 파일을 올려보세요.';
     setupDims();
