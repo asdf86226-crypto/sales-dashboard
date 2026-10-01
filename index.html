@@ -156,6 +156,11 @@
   .modal p { margin:0 0 12px; font-size:12px; color:var(--muted); }
   .modal textarea { width:100%; height:220px; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--page); color:var(--text-1); resize:vertical; }
   .modal .row { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+  .modal .steps { margin:0 0 12px; padding-left:18px; font-size:12px; color:var(--text-2); line-height:1.75; }
+  .modal input[type=url] { width:100%; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+    border:1px solid var(--border); border-radius:8px; padding:9px 10px; background:var(--page); color:var(--text-1); }
+  .modal .warn-note { background:color-mix(in srgb, var(--bad) 9%, transparent); border:1px solid color-mix(in srgb, var(--bad) 28%, transparent);
+    border-radius:8px; padding:9px 11px; color:var(--text-2); margin:0 0 12px; }
 </style>
 </head>
 <body>
@@ -173,6 +178,7 @@
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
       <input type="file" id="taxoInput" accept=".xlsx,.xls,.csv" hidden>
       <button class="btn" id="uploadBtn">📂 엑셀/CSV 업로드</button>
+      <button class="btn ghost" id="linkBtn">🔗 구글시트 연결</button>
       <button class="btn ghost" id="taxoBtn">🏷 분류기준</button>
       <button class="btn ghost" id="reportBtn">📤 보고용 공유</button>
       <button class="btn ghost" id="copyBtn">📋 표 복사</button>
@@ -288,6 +294,30 @@
 </div>
 
 <div class="tooltip" id="tooltip"></div>
+
+<div class="modal-bg" id="linkModal">
+  <div class="modal">
+    <h3>구글시트에서 자동으로 가져오기</h3>
+    <p>판매현황을 <b>구글시트</b>로 만들어 <b>웹에 게시</b>하면, 시트를 고칠 때마다 이 대시보드가
+       알아서 최신 내용을 받아옵니다. 파일을 올리지 않아도 됩니다.</p>
+    <ol class="steps">
+      <li>판매현황 엑셀을 구글 드라이브에 올리고 <b>더블클릭 → 구글 시트로 열기</b></li>
+      <li>시트에서 <b>파일 → 공유 → 웹에 게시</b></li>
+      <li>왼쪽에서 해당 시트를 고르고, 오른쪽 형식을 <b>쉼표로 구분된 값(.csv)</b> 로 바꾼 뒤 <b>게시</b></li>
+      <li>나오는 주소를 복사해서 아래에 붙여넣기</li>
+    </ol>
+    <p class="warn-note">⚠ <b>웹에 게시하면 주소를 아는 사람은 누구나 볼 수 있습니다.</b>
+       주소를 아무 데도 올리지 마세요. 그만두려면 같은 화면에서 <b>게시 중지</b>를 누르면 됩니다.</p>
+    <input id="linkUrl" type="url" spellcheck="false" autocomplete="off"
+           placeholder="https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv">
+    <p class="meta" id="linkStatus"></p>
+    <div class="row">
+      <button class="btn ghost" id="linkRemove">연결 끊기</button>
+      <button class="btn ghost" id="linkClose">닫기</button>
+      <button class="btn" id="linkSave">연결하고 가져오기</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-bg" id="copyModal">
   <div class="modal">
@@ -1264,10 +1294,91 @@ $('#copyModalCopy').addEventListener('click', ()=>{
   catch(e){ alert('자동 복사가 막혀 있습니다. 창 안에서 Ctrl+C로 복사해 주세요.'); }
 });
 $('#fileInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readFile(f); e.target.value=''; });
+$('#linkBtn').addEventListener('click', async ()=>{
+  $('#linkUrl').value = (await loadLink()) || '';
+  setLinkStatus('');
+  $('#linkModal').classList.add('open');
+  $('#linkUrl').focus();
+});
+$('#linkClose').addEventListener('click', ()=>$('#linkModal').classList.remove('open'));
+$('#linkModal').addEventListener('click', e=>{ if(e.target===$('#linkModal')) $('#linkModal').classList.remove('open'); });
+$('#linkRemove').addEventListener('click', async ()=>{
+  await clearLink(); $('#linkUrl').value=''; setLinkStatus('연결을 끊었습니다. 올려둔 데이터는 그대로 있습니다.');
+});
+$('#linkSave').addEventListener('click', async ()=>{
+  const n = normalizeSheetUrl($('#linkUrl').value);
+  if (n.error) { setLinkStatus('⚠ ' + n.error.split('\n')[0]); alert(n.error); return; }
+  if (n.note) setLinkStatus(n.note);
+  if (await pullFromSheet(n.url, true)) { await saveLink(n.url); $('#linkUrl').value = n.url; }
+});
 $('#taxoBtn').addEventListener('click', ()=>$('#taxoInput').click());
 $('#taxoInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readTaxonomyFile(f); e.target.value=''; });
 $('#sampleBtn').addEventListener('click', ()=>{ RAW=makeSampleData(); window.__lastMapping='<b>샘플 데이터</b> (상품 6종 · 거래처 6곳)'; setupDims(); render('샘플 데이터 (상품 6종 · 거래처 6곳 · 약 18개월)'); });
 window.addEventListener('resize', ()=>render());
+
+/* ---------- 구글시트 연결 ----------
+ * "웹에 게시 → CSV" 주소에서 판매현황을 직접 받아온다.
+ * 구글 드라이브의 일반 공유 링크(drive.google.com/.../view)는 다른 사이트에서 읽는 걸
+ * 막아 두어(CORS) 쓸 수 없다. 게시된 CSV 주소만 브라우저가 가져올 수 있다. */
+function normalizeSheetUrl(raw) {
+  const u = String(raw || '').trim();
+  if (!u) return { error:'주소를 붙여넣어 주세요.' };
+  if (/drive\.google\.com\/file\//.test(u) || /[?&]id=/.test(u) && /drive\.google\.com/.test(u))
+    return { error:'드라이브 파일 링크는 브라우저가 가져올 수 없습니다.\n\n구글시트로 연 뒤 ' +
+                   '[파일 → 공유 → 웹에 게시 → 쉼표로 구분된 값(.csv)] 주소를 넣어주세요.' };
+  if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(u))
+    return { error:'구글시트 "웹에 게시" 주소가 아닙니다.\n\nhttps://docs.google.com/spreadsheets/... 로 시작해야 합니다.' };
+  // 게시 주소는 /pub, /pubhtml 둘 다로 복사된다. 어느 쪽이든 CSV 로 바꾼다.
+  const pub = u.match(/^(https:\/\/docs\.google\.com\/spreadsheets\/d\/e\/[^/]+)\/pub(?:html)?(\?[^#]*)?/);
+  if (pub) {
+    const qs = new URLSearchParams(pub[2] || '');
+    qs.set('output', 'csv');
+    qs.delete('single'); qs.delete('widget'); qs.delete('headers');   // html 전용 인자
+    return { url: `${pub[1]}/pub?${qs}` };
+  }
+  const m = u.match(/\/spreadsheets\/d\/(?!e\/)([^/]+)/);
+  if (m) {
+    const gid = (u.match(/[#&?]gid=(\d+)/) || [])[1];
+    return { url: `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv` + (gid ? `&gid=${gid}` : ''),
+             note: '일반 시트 주소라 내보내기 형태로 바꿨습니다. 가져오지 못하면 "웹에 게시" 주소를 써주세요.' };
+  }
+  return { error:'주소에서 시트를 찾지 못했습니다.' };
+}
+async function fetchSheet(url) {
+  let res;
+  try {
+    res = await fetch(url, { redirect:'follow', cache:'no-store' });
+  } catch (e) {
+    // CORS 차단과 네트워크 장애는 브라우저가 구분해 주지 않는다. 둘 다 안내한다.
+    throw new Error('가져오지 못했습니다. 시트가 "웹에 게시" 되어 있는지 확인해 주세요.\n' +
+                    '(일반 공유 링크는 다른 사이트에서 읽을 수 없습니다)');
+  }
+  if (!res.ok) throw new Error(`구글이 ${res.status} 를 돌려줬습니다. 게시가 중지됐거나 주소가 바뀌지 않았는지 확인해 주세요.`);
+  const text = await res.text();
+  if (/^\s*<(!doctype|html)/i.test(text))
+    throw new Error('CSV 대신 웹페이지가 왔습니다. 게시 형식을 "쉼표로 구분된 값(.csv)" 으로 바꿔주세요.');
+  return text;
+}
+async function pullFromSheet(url, quiet) {
+  try {
+    setLinkStatus('가져오는 중…');
+    const text = await fetchSheet(url);
+    const { data, mapping } = ingestRows(parseCSVtoRows(text));
+    RAW = data;
+    window.__fname = '구글시트';
+    setupDims();
+    render(mapping, '구글시트');
+    await saveData('구글시트');
+    showSavedNote(Date.now(), '구글시트');
+    setLinkStatus(`✅ ${KRW.format(data.length)}건 가져왔습니다.`);
+    return true;
+  } catch (err) {
+    setLinkStatus('⚠ ' + err.message);
+    if (!quiet) alert('구글시트 가져오기 실패\n\n' + err.message);
+    return false;
+  }
+}
+function setLinkStatus(msg) { const el = $('#linkStatus'); if (el) el.textContent = msg || ''; }
 
 /* ---------- 분류기준 읽기 ----------
  * "상품분류" 시트에서 품목코드 · 품목명 · 상품분류 를,
@@ -1426,6 +1537,30 @@ function showSavedNote(savedAt, fname) {
   });
 }
 
+/* 연결한 구글시트 주소도 같은 DB에 보관한다. 저장소에는 넣지 않는다. */
+const LINK_KEY = 'sheetLink';
+async function saveLink(url) {
+  try { const db = await idbOpen();
+    await new Promise(res => { const tx = db.transaction(STORE,'readwrite');
+      tx.objectStore(STORE).put({ url, savedAt: Date.now() }, LINK_KEY); tx.oncomplete = res; });
+    db.close();
+  } catch (e) { console.warn('주소 보관 실패:', e); }
+}
+async function loadLink() {
+  try { const db = await idbOpen();
+    const got = await new Promise((res, rej) => { const tx = db.transaction(STORE,'readonly');
+      const q = tx.objectStore(STORE).get(LINK_KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    db.close(); return got && got.url ? got.url : null;
+  } catch (e) { return null; }
+}
+async function clearLink() {
+  try { const db = await idbOpen();
+    await new Promise(res => { const tx = db.transaction(STORE,'readwrite');
+      tx.objectStore(STORE).delete(LINK_KEY); tx.oncomplete = res; });
+    db.close();
+  } catch (e) { console.warn(e); }
+}
+
 /* 분류기준도 같은 DB에 따로 보관한다(판매 데이터를 지워도 분류기준은 남는다) */
 const TAXO_KEY = 'taxonomy';
 async function saveTaxonomy(t, fname) {
@@ -1470,7 +1605,13 @@ async function clearTaxonomy() {
     setupDims();
     render(null, saved.fname);
     showSavedNote(saved.savedAt, saved.fname);
+    // 시트를 연결해 뒀다면 백그라운드로 최신 내용을 받아 덮어쓴다.
+    // 실패해도 보관본이 이미 그려져 있으므로 조용히 넘어간다.
+    const url = await loadLink();
+    if (url) pullFromSheet(url, true);
   } else {
+    const url = await loadLink();
+    if (url && await pullFromSheet(url, true)) return;   // 연결돼 있으면 샘플 대신 시트를 쓴다
     RAW = makeSampleData();
     window.__lastMapping = '<b>샘플 데이터</b> — 상단의 “엑셀/CSV 업로드”로 이카운트 판매현황 파일을 올려보세요.';
     setupDims();
