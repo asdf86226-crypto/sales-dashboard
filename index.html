@@ -198,6 +198,9 @@
       <button class="tab" role="tab" data-period="year"    aria-selected="false">연별</button>
     </div>
     <div class="prodfilter">
+      <label style="display:flex;align-items:center;gap:8px" id="companyWrap" hidden>회사
+        <select id="companySelect"></select>
+      </label>
       <label style="display:flex;align-items:center;gap:8px">분석 기준
         <select id="dimSelect">
           <option value="product">상품</option>
@@ -375,11 +378,17 @@ function 설정() {
   if (!key) { key = Utilities.getUuid().replace(/-/g, ''); P.setProperty('SALES_KEY', key); }
 
   var picked = '';
-  try { var hit = 판매파일_(f); picked = hit ? (hit.getName() + ' (' + 날짜_(hit.getLastUpdated()) + ' 수정)') : '못 찾음'; }
-  catch (e) { picked = '확인 실패 — ' + e.message; }
+  try {
+    var hits = 판매파일들_(f);
+    picked = hits.length
+      ? '\n' + hits.map(function (x) {
+          return '  · ' + x.getName() + '  [' + 회사_(x.getName()) + ']  (' + 날짜_(x.getLastUpdated()) + ' 수정)';
+        }).join('\n')
+      : ' 못 찾음';
+  } catch (e) { picked = ' 확인 실패 — ' + e.message; }
 
   var m = '[준비 끝]\n\n폴더 : ' + f.getUrl()
-        + '\n판매현황 파일 : ' + picked
+        + '\n판매현황 파일 ' + (picked.indexOf('\n') === 0 ? '(' + 판매파일들_(f).length + '개) :' : ':') + picked
         + '\n\n열쇠 : ' + key
         + '\n\n이제 [배포 → 새 배포 → 웹 앱] 으로 배포하고,'
         + '\n웹 앱 URL 과 위 열쇠를 대시보드에 넣으세요.';
@@ -401,16 +410,28 @@ function doGet(e) {
     if (p.key !== P.getProperty('SALES_KEY')) return 응답_(p.callback, { ok: false, error: '열쇠가 맞지 않습니다.' });
 
     var f = 폴더_();
-    var file = 판매파일_(f);
-    if (!file) return 응답_(p.callback, { ok: false, error: '폴더에서 판매현황 파일을 찾지 못했습니다. 파일 이름에 "판매" 를 넣어주세요.' });
+    var files = 판매파일들_(f);
+    if (!files.length) return 응답_(p.callback, { ok: false, error: '폴더에서 판매현황 파일을 찾지 못했습니다. 파일 이름에 "판매" 를 넣어주세요.' });
 
-    var meta = { ok: true, name: file.getName(), updated: file.getLastUpdated().getTime(), folder: f.getUrl() };
+    // 파일 목록과 수정시각 = 바뀌었는지 판단하는 지문
+    var list = files.map(function (x) {
+      return { name: x.getName(), company: 회사_(x.getName()), updated: x.getLastUpdated().getTime() };
+    });
+    var meta = { ok: true, folder: f.getUrl(), files: list, 지문: 지문_(list) };
     if (p.sales === 'meta') return 응답_(p.callback, meta);          // 바뀌었는지만 싸게 확인
 
-    var rows = 행읽기_(file);
-    if (!rows || !rows.length) return 응답_(p.callback, { ok: false, error: '파일에서 읽을 내용이 없습니다.' });
-    meta.rows = rows;
-    meta.n = rows.length;
+    // 파일마다 열 구성이 다를 수 있으므로 합치지 않고 따로 넘긴다.
+    // (대시보드가 파일별로 열을 인식한 뒤 합친다)
+    var out = [], total = 0;
+    for (var i = 0; i &lt; files.length; i++) {
+      var rows = 행읽기_(files[i]);
+      if (!rows || !rows.length) continue;
+      total += rows.length - 1;
+      out.push({ name: list[i].name, company: list[i].company, updated: list[i].updated, rows: rows });
+    }
+    if (!out.length) return 응답_(p.callback, { ok: false, error: '파일에서 읽을 내용이 없습니다.' });
+    meta.data = out;
+    meta.n = total;
     return 응답_(p.callback, meta);
   } catch (err) {
     return 응답_(p.callback, { ok: false, error: String(err &amp;&amp; err.message || err) });
@@ -428,23 +449,37 @@ function 폴더_() {
   return f;
 }
 
-/** 이름에 판매·매출이 들어간 파일을 고르고, 같은 점수면 최근에 고친 것을 쓴다 */
-function 판매파일_(folder) {
-  var it = folder.getFiles(), best = null, bestScore = -1;
+/** 이름에 판매·매출이 들어간 파일을 "전부" 고른다.
+ *  회사·연도별로 여러 개를 넣어두면(태성정밀 25년 / 플로우텍 26년 …) 모두 합쳐 본다. */
+function 판매파일들_(folder) {
+  var it = folder.getFiles(), hit = [], seen = {};
   while (it.hasNext()) {
     var f = it.next(), nm = f.getName();
-    if (nm.charAt(0) === '~') continue;                       // 엑셀 임시파일
+    if (nm.charAt(0) === '~') continue;                                  // 엑셀 임시파일
     if (!/\.(xlsx|csv|tsv|txt)$/i.test(nm) &amp;&amp;
         f.getMimeType() !== 'application/vnd.google-apps.spreadsheet') continue;
-    var s = /판매|매출|sales/i.test(nm) ? 2 : 0;
-    if (/현황|내역/.test(nm)) s += 1;
-    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) s -= 5;   // 다른 용도 파일
-    if (s &lt; 0) continue;
-    if (s &gt; bestScore || (s === bestScore &amp;&amp; best &amp;&amp; f.getLastUpdated() &gt; best.getLastUpdated())) {
-      best = f; bestScore = s;
-    }
+    if (!/판매|매출|sales/i.test(nm)) continue;                           // 판매 자료만
+    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) continue;   // 다른 용도
+    if (seen[nm]) continue;                                              // 같은 이름 중복 합산 방지
+    seen[nm] = 1;
+    hit.push(f);
   }
-  return best;
+  hit.sort(function (a, b) { return a.getName() &lt; b.getName() ? -1 : 1; });
+  return hit;
+}
+
+/** 파일 이름 앞부분에서 회사를 뽑는다. "태성정밀 26년 판매량.xlsx" → "태성정밀" */
+function 회사_(name) {
+  var s = String(name).replace(/\.[^.]+$/, '').trim();
+  var m = s.match(/^([^\s_\-0-9]+)/);                 // 숫자·구분자 앞까지
+  var c = m ? m[1] : '';
+  c = c.replace(/(판매량|판매현황|판매|매출현황|매출|내역|현황)$/, '').trim();
+  return c || '(미지정)';
+}
+
+/** 파일 목록 + 수정시각을 한 줄로 — 이게 바뀌면 다시 받는다 */
+function 지문_(list) {
+  return list.map(function (x) { return x.name + '@' + x.updated; }).join('|');
 }
 
 /* ---------- 파일 읽기 (구매요청 대시보드와 같은 방식) ---------- */
@@ -608,7 +643,14 @@ function dimValue(r, dim) {
   if (dim === 'group')    return categoryOf(r.product, r.code);
   return r.product;
 }
-const hasCustomerData = () => RAW.some(r => r.customer && r.customer !== '(미지정)');
+/* ---------- 회사 구분 ----------
+ * 드라이브에 회사별 파일(태성정밀 / 플로우텍)을 함께 두면 모두 합쳐 받는다.
+ * 섞인 채로 보면 합계가 두 회사 몫이 되므로, 회사를 골라 전체를 좁힐 수 있게 한다.
+ * 이 아래의 모든 계산은 RAW 가 아니라 scoped() 를 기준으로 한다. */
+let companyFilter = '__all__';
+const companies = () => [...new Set(RAW.map(r => r.company).filter(Boolean))].sort();
+const scoped = () => companyFilter === '__all__' ? RAW : RAW.filter(r => r.company === companyFilter);
+const hasCustomerData = () => scoped().some(r => r.customer && r.customer !== '(미지정)');
 
 /* ---------- 컬럼 매핑 사전 (우선순위 순서 중요) ---------- */
 const DICT = {
@@ -784,7 +826,7 @@ function periodKey(date, period) {
 let dateFrom = null, dateTo = null;   // 선택된 기간 (기본: 전체)
 const parseYMD = (s) => { if (!s) return null; const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
 const fmtYMD = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-function dataBounds() { if (!RAW.length) return null; const t = RAW.map(r=>r.date.getTime()); return { min:new Date(Math.min(...t)), max:new Date(Math.max(...t)) }; }
+function dataBounds() { const b = scoped(); if (!b.length) return null; const t = b.map(r=>r.date.getTime()); return { min:new Date(Math.min(...t)), max:new Date(Math.max(...t)) }; }
 function setDateRange(from, to) {   // from/to: Date(일 단위) 또는 null → 전체 경계
   const b = dataBounds(); if (!b) return;
   const f = from || b.min, t = to || b.max;
@@ -792,7 +834,7 @@ function setDateRange(from, to) {   // from/to: Date(일 단위) 또는 null →
   dateTo   = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59, 999);
   if ($('#dateFrom')) { $('#dateFrom').value = fmtYMD(dateFrom); $('#dateTo').value = fmtYMD(dateTo); }
 }
-const viewRows = () => (dateFrom && dateTo) ? RAW.filter(r => r.date >= dateFrom && r.date <= dateTo) : RAW;
+const viewRows = () => { const b = scoped(); return (dateFrom && dateTo) ? b.filter(r => r.date >= dateFrom && r.date <= dateTo) : b; };
 
 // 순위·상세 카드 전용 기간 (위쪽 기간과 독립)
 let rankFrom = null, rankTo = null;
@@ -803,7 +845,7 @@ function setRankRange(from, to) {
   rankTo   = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59, 999);
   if ($('#rankFrom')) { $('#rankFrom').value = fmtYMD(rankFrom); $('#rankTo').value = fmtYMD(rankTo); }
 }
-const rankRows = () => (rankFrom && rankTo) ? RAW.filter(r => r.date >= rankFrom && r.date <= rankTo) : RAW;
+const rankRows = () => { const b = scoped(); return (rankFrom && rankTo) ? b.filter(r => r.date >= rankFrom && r.date <= rankTo) : b; };
 const spanBounds = () => (dateFrom && dateTo) ? { lo:dateFrom, hi:dateTo } : (dataBounds() ? { lo:dataBounds().min, hi:dataBounds().max } : null);
 
 /* ---------- 집계 ---------- */
@@ -853,6 +895,7 @@ function aggregateDim(dim, rows) {
 /* ---------- 분석 기준 · 필터 드롭다운 ---------- */
 function setupDims() {
   currentDim = 'product';                    // 새 데이터는 상품 기준으로 시작
+  setupCompanies();                          // 회사 선택을 먼저 세운다(아래 계산이 이걸 따른다)
   // 거래처 데이터가 없으면 거래처 옵션 비활성화
   document.querySelector('#dimSelect option[value="customer"]').disabled = !hasCustomerData();
   $('#dimSelect').value = currentDim;
@@ -862,6 +905,20 @@ function setupDims() {
   setDateRange(null, null);                   // 전체 기간으로 초기화
   setRankRange(null, null);                   // 순위·상세도 전체 기간으로 초기화
   rebuildFilter();
+}
+/* 회사가 둘 이상일 때만 선택칸을 보여준다(한 회사뿐이면 쓸모가 없다) */
+function setupCompanies() {
+  const list = companies();
+  const wrap = $('#companyWrap'), sel = $('#companySelect');
+  if (list.length < 2) { wrap.hidden = true; companyFilter = '__all__'; sel.innerHTML = ''; return; }
+  if (companyFilter !== '__all__' && !list.includes(companyFilter)) companyFilter = '__all__';
+  // 회사 이름은 파일명에서 온 값이라 DOM 으로 넣는다(따옴표·꺾쇠가 들어가도 안전하게)
+  sel.textContent = '';
+  const mk = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; };
+  sel.appendChild(mk('__all__', `전체 (${list.length}곳)`));
+  for (const c of list) sel.appendChild(mk(c, c));
+  sel.value = companyFilter;
+  wrap.hidden = false;
 }
 function applyDateInputs() {
   let f = parseYMD($('#dateFrom').value), t = parseYMD($('#dateTo').value);
@@ -896,7 +953,7 @@ let filterMembers = [];   // 현재 분석 기준의 항목들 {name, code, qty}
 function rebuildFilter() {
   const meta = DIMS[currentDim];
   const seen = new Map();
-  for (const r of RAW) {
+  for (const r of scoped()) {
     const k = dimValue(r, currentDim);
     if (!seen.has(k)) seen.set(k, { name:k, codes:new Set(), qty:0 });
     const g = seen.get(k); if (currentDim === 'product' && r.code) g.codes.add(r.code); g.qty += r.qty;
@@ -1172,7 +1229,7 @@ function renderItemQuarter() {
 
   // 품목의 월별 판매량 (기간 선택과 무관하게 전체 데이터에서 — 직전 6개월 비교를 위해)
   const monthly = new Map();
-  for (const r of RAW) { if (r.product !== currentFilter) continue;
+  for (const r of scoped()) { if (r.product !== currentFilter) continue;
     const k = monthKeyOf(r.date); monthly.set(k, (monthly.get(k)||0) + r.qty); }
   const qtyOf = (m) => monthly.get(m.key) || 0;
 
@@ -1481,6 +1538,18 @@ function makeSampleData() {
 $('#tabs').addEventListener('click', e=>{ const t=e.target.closest('.tab'); if(!t) return;
   currentPeriod=t.dataset.period; [...$('#tabs').children].forEach(x=>x.setAttribute('aria-selected',x===t)); render(); });
 $('#dimSelect').addEventListener('change', e=>{ currentDim=e.target.value; rankQuery=''; rankSelected=null; $('#rankSearch').value=''; rebuildFilter(); render(); });
+$('#companySelect').addEventListener('change', e=>{
+  companyFilter = e.target.value;
+  // 회사를 바꾸면 기간 경계도 그 회사 자료에 맞춰 다시 잡는다
+  const b = dataBounds();
+  if (b) { const lo=fmtYMD(b.min), hi=fmtYMD(b.max);
+    ['#dateFrom','#dateTo','#rankFrom','#rankTo'].forEach(id=>{ $(id).min=lo; $(id).max=hi; }); }
+  setDateRange(null, null); setRankRange(null, null);
+  document.querySelector('#dimSelect option[value="customer"]').disabled = !hasCustomerData();
+  if (currentDim==='customer' && !hasCustomerData()) { currentDim='product'; $('#dimSelect').value='product'; }
+  rankQuery=''; rankSelected=null; $('#rankSearch').value='';
+  rebuildFilter(); render();
+});
 $('#rankSearch').addEventListener('input', e=>{ rankQuery=e.target.value; renderRank(aggregateDim(currentDim)); highlightDimRow(); });
 $('#dateFrom').addEventListener('change', applyDateInputs);
 $('#dateTo').addEventListener('change', applyDateInputs);
@@ -1595,24 +1664,36 @@ async function pullFromDrive(conn, quiet) {
   try {
     setLinkStatus('드라이브를 확인하는 중…');
     const meta = await askFeed(url, key, 'meta');
-    // 파일이 그대로면 다시 받지 않는다(수만 행을 매번 내려받지 않도록)
-    if (!quiet && conn.updated && meta.updated === conn.updated && RAW.length) {
-      setLinkStatus(`이미 최신입니다 — ${meta.name}`);
+    // 파일 목록·수정시각이 그대로면 다시 받지 않는다(수만 행을 매번 내려받지 않도록)
+    if (conn.sig && meta.지문 === conn.sig && RAW.length) {
+      if (!quiet) setLinkStatus(`이미 최신입니다 — 파일 ${meta.files.length}개`);
       return true;
     }
-    if (quiet && conn.updated && meta.updated === conn.updated && RAW.length) return true;
-
-    setLinkStatus(`${meta.name} 가져오는 중…`);
+    setLinkStatus(`파일 ${meta.files.length}개 가져오는 중…`);
     const full = await askFeed(url, key, 'data');
-    const { data, mapping } = ingestRows(full.rows);
-    RAW = data;
-    window.__fname = full.name;
+
+    // 파일마다 열 구성이 다를 수 있어 파일별로 인식한 뒤 합친다
+    const all = [], notes = [];
+    for (const f of full.data) {
+      let got;
+      try { got = ingestRows(f.rows); }
+      catch (e) { notes.push(`${f.name} ⚠ ${e.message}`); continue; }
+      for (const r of got.data) r.company = f.company || '(미지정)';
+      all.push(...got.data);
+      notes.push(`${f.name} <b>${KRW.format(got.data.length)}건</b>`);
+    }
+    if (!all.length) throw new Error('읽을 수 있는 판매 데이터가 없습니다.\n' + notes.join('\n'));
+
+    all.sort((a, b) => a.date - b.date);
+    RAW = all;
+    const label = `드라이브 · 파일 ${full.data.length}개`;
+    window.__fname = label;
     setupDims();
-    render(mapping, full.name);
-    await saveData(full.name);
-    showSavedNote(Date.now(), full.name);
-    await saveLink({ url, key, updated: full.updated, name: full.name });
-    setLinkStatus(`✅ ${KRW.format(data.length)}건 가져왔습니다 — ${full.name}`);
+    render('인식됨 — ' + notes.join(' · '), label);
+    await saveData(label);
+    showSavedNote(Date.now(), label);
+    await saveLink({ url, key, sig: full.지문, files: meta.files });
+    setLinkStatus(`✅ ${KRW.format(all.length)}건 · 파일 ${full.data.length}개를 가져왔습니다.`);
     return true;
   } catch (err) {
     setLinkStatus('⚠ ' + err.message);
@@ -1732,7 +1813,7 @@ async function saveData(fname) {
     const payload = {
       savedAt: Date.now(), fname: fname || window.__fname || '',
       amountKey, mapping: window.__lastMapping || '',
-      rows: RAW.map(r => [r.date.getTime(), r.qty, r.amounts, r.product, r.code, r.customer, r.rawCustomer])
+      rows: RAW.map(r => [r.date.getTime(), r.qty, r.amounts, r.product, r.code, r.customer, r.rawCustomer, r.company])
     };
     await new Promise((res, rej) => {
       const tx = db.transaction(STORE, 'readwrite');
@@ -1753,7 +1834,7 @@ async function loadSavedData() {
     db.close();
     if (!got || !got.rows || !got.rows.length) return null;
     RAW = got.rows.map(a => ({ date:new Date(a[0]), qty:a[1], amounts:a[2], product:a[3], code:a[4],
-                               customer:a[5], rawCustomer: a[6] != null ? a[6] : a[5] }));
+                               customer:a[5], rawCustomer: a[6] != null ? a[6] : a[5], company: a[7] }));
     amountKey = got.amountKey;
     window.__lastMapping = got.mapping || '';
     window.__fname = got.fname || '';

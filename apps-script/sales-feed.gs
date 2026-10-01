@@ -30,11 +30,17 @@ function 설정() {
   if (!key) { key = Utilities.getUuid().replace(/-/g, ''); P.setProperty('SALES_KEY', key); }
 
   var picked = '';
-  try { var hit = 판매파일_(f); picked = hit ? (hit.getName() + ' (' + 날짜_(hit.getLastUpdated()) + ' 수정)') : '못 찾음'; }
-  catch (e) { picked = '확인 실패 — ' + e.message; }
+  try {
+    var hits = 판매파일들_(f);
+    picked = hits.length
+      ? '\n' + hits.map(function (x) {
+          return '  · ' + x.getName() + '  [' + 회사_(x.getName()) + ']  (' + 날짜_(x.getLastUpdated()) + ' 수정)';
+        }).join('\n')
+      : ' 못 찾음';
+  } catch (e) { picked = ' 확인 실패 — ' + e.message; }
 
   var m = '[준비 끝]\n\n폴더 : ' + f.getUrl()
-        + '\n판매현황 파일 : ' + picked
+        + '\n판매현황 파일 ' + (picked.indexOf('\n') === 0 ? '(' + 판매파일들_(f).length + '개) :' : ':') + picked
         + '\n\n열쇠 : ' + key
         + '\n\n이제 [배포 → 새 배포 → 웹 앱] 으로 배포하고,'
         + '\n웹 앱 URL 과 위 열쇠를 대시보드에 넣으세요.';
@@ -56,16 +62,28 @@ function doGet(e) {
     if (p.key !== P.getProperty('SALES_KEY')) return 응답_(p.callback, { ok: false, error: '열쇠가 맞지 않습니다.' });
 
     var f = 폴더_();
-    var file = 판매파일_(f);
-    if (!file) return 응답_(p.callback, { ok: false, error: '폴더에서 판매현황 파일을 찾지 못했습니다. 파일 이름에 "판매" 를 넣어주세요.' });
+    var files = 판매파일들_(f);
+    if (!files.length) return 응답_(p.callback, { ok: false, error: '폴더에서 판매현황 파일을 찾지 못했습니다. 파일 이름에 "판매" 를 넣어주세요.' });
 
-    var meta = { ok: true, name: file.getName(), updated: file.getLastUpdated().getTime(), folder: f.getUrl() };
+    // 파일 목록과 수정시각 = 바뀌었는지 판단하는 지문
+    var list = files.map(function (x) {
+      return { name: x.getName(), company: 회사_(x.getName()), updated: x.getLastUpdated().getTime() };
+    });
+    var meta = { ok: true, folder: f.getUrl(), files: list, 지문: 지문_(list) };
     if (p.sales === 'meta') return 응답_(p.callback, meta);          // 바뀌었는지만 싸게 확인
 
-    var rows = 행읽기_(file);
-    if (!rows || !rows.length) return 응답_(p.callback, { ok: false, error: '파일에서 읽을 내용이 없습니다.' });
-    meta.rows = rows;
-    meta.n = rows.length;
+    // 파일마다 열 구성이 다를 수 있으므로 합치지 않고 따로 넘긴다.
+    // (대시보드가 파일별로 열을 인식한 뒤 합친다)
+    var out = [], total = 0;
+    for (var i = 0; i < files.length; i++) {
+      var rows = 행읽기_(files[i]);
+      if (!rows || !rows.length) continue;
+      total += rows.length - 1;
+      out.push({ name: list[i].name, company: list[i].company, updated: list[i].updated, rows: rows });
+    }
+    if (!out.length) return 응답_(p.callback, { ok: false, error: '파일에서 읽을 내용이 없습니다.' });
+    meta.data = out;
+    meta.n = total;
     return 응답_(p.callback, meta);
   } catch (err) {
     return 응답_(p.callback, { ok: false, error: String(err && err.message || err) });
@@ -83,23 +101,37 @@ function 폴더_() {
   return f;
 }
 
-/** 이름에 판매·매출이 들어간 파일을 고르고, 같은 점수면 최근에 고친 것을 쓴다 */
-function 판매파일_(folder) {
-  var it = folder.getFiles(), best = null, bestScore = -1;
+/** 이름에 판매·매출이 들어간 파일을 "전부" 고른다.
+ *  회사·연도별로 여러 개를 넣어두면(태성정밀 25년 / 플로우텍 26년 …) 모두 합쳐 본다. */
+function 판매파일들_(folder) {
+  var it = folder.getFiles(), hit = [], seen = {};
   while (it.hasNext()) {
     var f = it.next(), nm = f.getName();
-    if (nm.charAt(0) === '~') continue;                       // 엑셀 임시파일
+    if (nm.charAt(0) === '~') continue;                                  // 엑셀 임시파일
     if (!/\.(xlsx|csv|tsv|txt)$/i.test(nm) &&
         f.getMimeType() !== 'application/vnd.google-apps.spreadsheet') continue;
-    var s = /판매|매출|sales/i.test(nm) ? 2 : 0;
-    if (/현황|내역/.test(nm)) s += 1;
-    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) s -= 5;   // 다른 용도 파일
-    if (s < 0) continue;
-    if (s > bestScore || (s === bestScore && best && f.getLastUpdated() > best.getLastUpdated())) {
-      best = f; bestScore = s;
-    }
+    if (!/판매|매출|sales/i.test(nm)) continue;                           // 판매 자료만
+    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) continue;   // 다른 용도
+    if (seen[nm]) continue;                                              // 같은 이름 중복 합산 방지
+    seen[nm] = 1;
+    hit.push(f);
   }
-  return best;
+  hit.sort(function (a, b) { return a.getName() < b.getName() ? -1 : 1; });
+  return hit;
+}
+
+/** 파일 이름 앞부분에서 회사를 뽑는다. "태성정밀 26년 판매량.xlsx" → "태성정밀" */
+function 회사_(name) {
+  var s = String(name).replace(/\.[^.]+$/, '').trim();
+  var m = s.match(/^([^\s_\-0-9]+)/);                 // 숫자·구분자 앞까지
+  var c = m ? m[1] : '';
+  c = c.replace(/(판매량|판매현황|판매|매출현황|매출|내역|현황)$/, '').trim();
+  return c || '(미지정)';
+}
+
+/** 파일 목록 + 수정시각을 한 줄로 — 이게 바뀌면 다시 받는다 */
+function 지문_(list) {
+  return list.map(function (x) { return x.name + '@' + x.updated; }).join('|');
 }
 
 /* ---------- 파일 읽기 (구매요청 대시보드와 같은 방식) ---------- */
