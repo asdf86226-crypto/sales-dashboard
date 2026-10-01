@@ -341,7 +341,9 @@
 </div>
 
 
-<script type="text/plain" id="feedScript">/**
+<!-- 드라이브 연결용 Apps Script 원본. <script> 는 raw text 라 &amp; 가 그대로 남으므로
+     문자 참조를 디코드하는 <textarea> 에 담는다. -->
+<textarea id="feedScript" hidden readonly aria-hidden="true">/**
  * 판매현황 배달부 (Google Apps Script)
  * ------------------------------------------------------------------
  * 구글 드라이브 폴더에 있는 판매현황 파일을 읽어 대시보드에 그대로 넘겨준다.
@@ -545,7 +547,7 @@ function 응답_(callback, obj) {
     .setMimeType(ContentService.MimeType.JAVASCRIPT);
   return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
 }
-</script>
+</textarea>
 <script src="./vendor/xlsx.min.js"></script>
 <script>
 /* ================================================================
@@ -1524,7 +1526,7 @@ $('#linkRemove').addEventListener('click', async ()=>{
   setLinkStatus('연결을 끊었습니다. 받아둔 데이터는 그대로 있습니다.');
 });
 $('#linkCopyScript').addEventListener('click', async ()=>{
-  const code = $('#feedScript').textContent;
+  const code = $('#feedScript').value;
   try { await navigator.clipboard.writeText(code); setLinkStatus('📋 스크립트를 복사했습니다. Apps Script 에 붙여넣으세요.'); }
   catch (e) {
     // 클립보드가 막힌 경우: 복사 창을 띄워 직접 Ctrl+C 하게 한다
