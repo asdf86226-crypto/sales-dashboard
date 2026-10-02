@@ -387,8 +387,9 @@ function 설정() {
       : ' 못 찾음';
   } catch (e) { picked = ' 확인 실패 — ' + e.message; }
 
-  var m = '[준비 끝]\n\n폴더 : ' + f.getUrl()
-        + '\n판매현황 파일 ' + (picked.indexOf('\n') === 0 ? '(' + 판매파일들_(f).length + '개) :' : ':') + picked
+  var m = '[준비 끝]\n\n폴더 : ' + f.getName() + '\n       ' + f.getUrl()
+        + '\n\n폴더 안의 파일 :\n  · ' + 폴더안_(f).join('\n  · ')
+        + '\n\n읽을 판매 파일 ' + (picked.indexOf('\n') === 0 ? '(' + 판매파일들_(f).length + '개) :' : ':') + picked
         + '\n\n열쇠 : ' + key
         + '\n\n이제 [배포 → 새 배포 → 웹 앱] 으로 배포하고,'
         + '\n웹 앱 URL 과 위 열쇠를 대시보드에 넣으세요.';
@@ -411,7 +412,16 @@ function doGet(e) {
 
     var f = 폴더_();
     var files = 판매파일들_(f);
-    if (!files.length) return 응답_(p.callback, { ok: false, error: '폴더에서 판매현황 파일을 찾지 못했습니다. 파일 이름에 "판매" 를 넣어주세요.' });
+    if (!files.length) {
+      // 왜 못 찾았는지 알 수 있게 폴더에 뭐가 있는지 그대로 알려준다
+      var 전부 = 폴더안_(f);
+      return 응답_(p.callback, { ok: false, error:
+        '폴더에서 판매현황 파일을 찾지 못했습니다.\n\n' +
+        '폴더: ' + f.getName() + '\n' +
+        (전부.length ? '안에 있는 파일 ' + 전부.length + '개:\n · ' + 전부.join('\n · ')
+                     : '폴더가 비어 있습니다.') +
+        '\n\n판매 자료 파일 이름에 "판매" 나 "매출" 이 들어가야 합니다.' });
+    }
 
     // 파일 목록과 수정시각 = 바뀌었는지 판단하는 지문
     var list = files.map(function (x) {
@@ -456,16 +466,50 @@ function 판매파일들_(folder) {
   while (it.hasNext()) {
     var f = it.next(), nm = f.getName();
     if (nm.charAt(0) === '~') continue;                                  // 엑셀 임시파일
-    if (!/\.(xlsx|csv|tsv|txt)$/i.test(nm) &amp;&amp;
-        f.getMimeType() !== 'application/vnd.google-apps.spreadsheet') continue;
+    if (!표파일_(f)) continue;
     if (!/판매|매출|sales/i.test(nm)) continue;                           // 판매 자료만
     if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) continue;   // 다른 용도
     if (seen[nm]) continue;                                              // 같은 이름 중복 합산 방지
     seen[nm] = 1;
     hit.push(f);
   }
+  // "판매" 가 이름에 없더라도, 폴더에 표 파일이 있고 다른 용도가 아니면 그걸 쓴다.
+  // (파일 이름을 바꿔 두셨을 때 아무것도 안 나오는 것보다 낫다)
+  if (!hit.length) hit = 후보파일들_(folder);
   hit.sort(function (a, b) { return a.getName() &lt; b.getName() ? -1 : 1; });
   return hit;
+}
+
+/** 폴더의 표 파일 중 다른 용도(재고·BOM·품목등록)가 아닌 것 */
+function 후보파일들_(folder) {
+  var it = folder.getFiles(), out = [], seen = {};
+  while (it.hasNext()) {
+    var f = it.next(), nm = f.getName();
+    if (nm.charAt(0) === '~' || seen[nm]) continue;
+    if (!표파일_(f)) continue;
+    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) continue;
+    seen[nm] = 1; out.push(f);
+  }
+  return out;
+}
+
+/** 폴더에 뭐가 들었는지 (진단용) */
+function 폴더안_(folder) {
+  var it = folder.getFiles(), out = [];
+  while (it.hasNext() &amp;&amp; out.length &lt; 40) {
+    var f = it.next();
+    out.push(f.getName() + '   [' + (표파일_(f) ? '표' : f.getMimeType()) + ']');
+  }
+  return out;
+}
+
+/** 읽을 수 있는 표 파일인가 — 확장자가 없는 구글시트도 포함 */
+function 표파일_(f) {
+  var nm = f.getName(), mt = f.getMimeType();
+  return /\.(xlsx|csv|tsv|txt)$/i.test(nm)
+      || mt === 'application/vnd.google-apps.spreadsheet'
+      || mt === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      || mt === 'text/csv' || mt === 'text/plain';
 }
 
 /** 파일 이름에서 회사를 뽑는다. "태성정밀 26년 판매량.xlsx" → "태성정밀"
