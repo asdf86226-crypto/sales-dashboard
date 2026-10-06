@@ -20,6 +20,7 @@
     --series-1:#3d5a80; --series-2:#b8762f; --series-3:#2f7d5c; --series-4:#b8862f;
     --series-5:#7d5aa0; --series-6:#3f7d8c; --series-7:#b8562f; --series-8:#5b6a70;
     --good:#2f7d5c; --bad:#c0342c;
+    --risk-1:#c0342c; --risk-2:#b8862f; --risk-3:#2f7d5c;
     --shadow:0 1px 2px rgba(21,27,34,.04), 0 4px 14px rgba(21,27,34,.05); --radius:8px;
   }
   :root[data-theme="dark"] {
@@ -33,6 +34,7 @@
     --series-1:#7fa6d4; --series-2:#e0a85c; --series-3:#5cba92; --series-4:#d9ad5c;
     --series-5:#b294d4; --series-6:#5fa9ba; --series-7:#e08a62; --series-8:#9aa9b0;
     --good:#5cba92; --bad:#f5776a;
+    --risk-1:#f5776a; --risk-2:#e0a252; --risk-3:#5cba92;
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
   }
   * { box-sizing:border-box; }
@@ -61,6 +63,35 @@
     width:34px; height:34px; border-radius:7px; display:grid; place-items:center; font-size:15px; cursor:pointer; }
   .icon-btn:hover { background:rgba(255,255,255,.12); color:#fff; }
   .headmeta { padding:14px 0 6px; }
+
+  /* ---------- 페이지 탭 (판매 분석 / 발주 필요) ---------- */
+  .pagetabs { display:flex; gap:4px; margin-right:10px; }
+  .ptab { font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
+    height:34px; padding:0 13px; border-radius:7px; display:inline-flex; align-items:center; gap:6px;
+    background:transparent; border:1px solid transparent; color:#9fb6bd; }
+  .ptab:hover { background:rgba(255,255,255,.08); color:#eef3f5; }
+  .ptab.is-on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .ptab-badge { background:rgba(255,255,255,.25); border-radius:999px; padding:1px 7px; font-size:11px; }
+  .ptab.is-on .ptab-badge { background:rgba(0,0,0,.22); }
+
+  /* ---------- 발주 필요 ---------- */
+  .ordhead { margin-bottom:18px; }
+  .ordbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px; }
+  .ordbar label { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-2); }
+  .ordbar .grow { flex:1 1 auto; }
+  .ordbar .thr input { width:62px; font:inherit; font-size:12.5px; padding:5px 7px; border-radius:7px;
+    border:1px solid var(--border); background:var(--page); color:var(--text-1); }
+  .ordbar .thr { display:inline-flex; align-items:center; gap:6px; color:var(--muted); }
+  #ordTable td.mono, #ordTable th.mono { font-variant-numeric:tabular-nums; }
+  .risk { display:inline-flex; align-items:center; gap:6px; font-weight:700; }
+  .risk .dot { width:8px; height:8px; border-radius:999px; flex:none; }
+  .risk.r1 { color:var(--risk-1); } .risk.r1 .dot { background:var(--risk-1); }
+  .risk.r2 { color:var(--risk-2); } .risk.r2 .dot { background:var(--risk-2); }
+  .risk.r3 { color:var(--risk-3); } .risk.r3 .dot { background:var(--risk-3); }
+  .risk.r0 { color:var(--muted); }  .risk.r0 .dot { background:var(--muted); }
+  tr.is-red td { background:color-mix(in srgb, var(--risk-1) 7%, transparent); }
+  .need { font-weight:700; color:var(--risk-1); }
+  .ordempty { padding:34px 12px; text-align:center; color:var(--muted); font-size:13px; }
   h1 { font-size:22px; margin:0 0 4px; letter-spacing:-0.01em; }
   .sub { color:var(--text-2); font-size:13px; margin:0; }
   .meta { color:var(--muted); font-size:12px; margin-top:6px; }
@@ -200,6 +231,10 @@
       <h1>판매현황 분석 대시보드</h1>
       <span class="brand-sub">상품 · 상품분류 · 거래처별 매출 분석</span>
     </div>
+    <nav class="pagetabs" id="pageTabs">
+      <button class="ptab is-on" data-page="sales">📊 판매 분석</button>
+      <button class="ptab" data-page="order">🧾 발주 필요 <span class="ptab-badge" id="orderBadge" hidden>0</span></button>
+    </nav>
     <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
     <input type="file" id="taxoInput" accept=".xlsx,.xls,.csv" hidden>
     <button class="sync-btn" id="linkBtn" title="구글 드라이브 폴더에서 판매현황을 받아옵니다">🔗 드라이브 연결</button>
@@ -213,7 +248,7 @@
   </div>
 </header>
 
-<div class="wrap">
+<div class="wrap" id="pageSales">
   <div class="headmeta">
     <p class="meta" id="meta"></p>
     <p class="meta" id="savedNote"></p>
@@ -329,6 +364,52 @@
   <footer>모든 처리는 브라우저 안에서만 이루어지며 판매 데이터는 외부로 전송되지 않습니다.</footer>
 </div>
 
+<!-- ===================== 발주 필요 ===================== -->
+<div class="wrap" id="pageOrder" hidden>
+  <div class="card ordhead">
+    <h2>발주가 필요한 품목</h2>
+    <p class="hint">최근 판매 속도로 지금 재고가 <b>몇 개월</b> 버티는지 계산해, 바닥나기 전에 챙겨야 할 품목만 모았습니다.
+       재고는 구매요청 대시보드가 이카운트에서 매일 받아오는 값을 그대로 씁니다.</p>
+    <div class="ordbar">
+      <label id="ordCompanyWrap" hidden>회사
+        <select id="ordCompany"></select>
+      </label>
+      <label>판매 속도 기준
+        <select id="ordWindow">
+          <option value="3">최근 3개월</option>
+          <option value="6" selected>최근 6개월</option>
+          <option value="12">최근 12개월</option>
+        </select>
+      </label>
+      <label>표시
+        <select id="ordRisk">
+          <option value="all">위험 + 주의 (기본)</option>
+          <option value="red">위험만 (2개월 미만)</option>
+          <option value="any">전부 보기</option>
+        </select>
+      </label>
+      <label>기준 개월
+        <span class="thr">위험 <input id="ordRed" type="number" min="0" step="0.5" value="2"> · 주의 <input id="ordAmber" type="number" min="0" step="0.5" value="4"></span>
+      </label>
+      <input id="ordSearch" class="dinput" type="search" placeholder="품목코드·품목명으로 찾기">
+      <span class="grow"></span>
+      <button class="btn ghost sm" id="ordCopy">📋 목록 복사</button>
+      <button class="btn ghost sm" id="ordExport">⬇ 엑셀</button>
+    </div>
+    <p class="meta" id="ordNote"></p>
+  </div>
+
+  <div class="kpis" id="ordKpis"></div>
+
+  <div class="card">
+    <div class="table-scroll">
+      <table id="ordTable"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <footer>재고는 구매요청 대시보드의 ERP 연동 값입니다. 판매 속도는 이 대시보드가 읽은 판매현황에서 계산합니다.</footer>
+</div>
+
 <div class="tooltip" id="tooltip"></div>
 
 <div class="modal-bg" id="linkModal">
@@ -350,6 +431,11 @@
            placeholder="웹 앱 URL — https://script.google.com/macros/s/AKfy.../exec">
     <input id="linkKey" type="text" spellcheck="false" autocomplete="off" style="margin-top:8px"
            placeholder="열쇠 — 실행 로그에 나온 긴 문자열">
+    <p class="steps" style="margin:14px 0 6px"><b>재고 연결 (선택)</b> — 넣어두면 <b>🧾 발주 필요</b> 탭에서
+       재고 대비 소진 예상을 볼 수 있습니다. 구매요청 대시보드의 <b>구글 시트 연결</b> 창에 있는
+       <code>.../exec</code> 주소를 그대로 붙여넣으세요.</p>
+    <input id="linkErp" type="url" spellcheck="false" autocomplete="off"
+           placeholder="구매요청 대시보드 주소 — https://script.google.com/macros/s/.../exec">
     <p class="meta" id="linkStatus"></p>
     <div class="row">
       <button class="btn ghost" id="linkCopyScript">📋 스크립트 복사</button>
@@ -686,6 +772,9 @@ function 응답_(callback, obj) {
  *      품목  : 품목명 / 제품명 / 상품명 / 품명 / 품목 / 제품 / 상품 (코드열 제외)
  * ================================================================ */
 const KRW = new Intl.NumberFormat('ko-KR');
+// 품목명·거래처명은 엑셀에서 온 값이라 그대로 HTML 에 넣지 않는다
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const $ = (s) => document.querySelector(s);
 const SERIES = ['--series-1','--series-2','--series-3','--series-4','--series-5','--series-6','--series-7','--series-8'];
 
@@ -999,16 +1088,29 @@ function setupDims() {
 /* 회사가 둘 이상일 때만 선택칸을 보여준다(한 회사뿐이면 쓸모가 없다) */
 function setupCompanies() {
   const list = companies();
-  const wrap = $('#companyWrap'), sel = $('#companySelect');
-  if (list.length < 2) { wrap.hidden = true; companyFilter = '__all__'; sel.innerHTML = ''; return; }
+  const pairs = [['#companyWrap','#companySelect'], ['#ordCompanyWrap','#ordCompany']];
+  if (list.length < 2) {
+    companyFilter = '__all__';
+    pairs.forEach(([w,se]) => { $(w).hidden = true; $(se).textContent = ''; });
+    return;
+  }
   if (companyFilter !== '__all__' && !list.includes(companyFilter)) companyFilter = '__all__';
   // 회사 이름은 파일명에서 온 값이라 DOM 으로 넣는다(따옴표·꺾쇠가 들어가도 안전하게)
-  sel.textContent = '';
   const mk = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; };
-  sel.appendChild(mk('__all__', `전체 (${list.length}곳)`));
-  for (const c of list) sel.appendChild(mk(c, c));
-  sel.value = companyFilter;
-  wrap.hidden = false;
+  pairs.forEach(([w, se]) => {
+    const sel = $(se);
+    sel.textContent = '';
+    sel.appendChild(mk('__all__', `전체 (${list.length}곳)`));
+    for (const c of list) sel.appendChild(mk(c, c));
+    sel.value = companyFilter;
+    $(w).hidden = false;
+  });
+}
+/* 두 탭의 회사 선택을 같은 값으로 맞춘다 */
+function syncCompany(v) {
+  companyFilter = v;
+  if ($('#companySelect').value !== v) $('#companySelect').value = v;
+  if ($('#ordCompany').value !== v) $('#ordCompany').value = v;
 }
 function applyDateInputs() {
   let f = parseYMD($('#dateFrom').value), t = parseYMD($('#dateTo').value);
@@ -1628,8 +1730,9 @@ function makeSampleData() {
 $('#tabs').addEventListener('click', e=>{ const t=e.target.closest('.tab'); if(!t) return;
   currentPeriod=t.dataset.period; [...$('#tabs').children].forEach(x=>x.setAttribute('aria-selected',x===t)); render(); });
 $('#dimSelect').addEventListener('change', e=>{ currentDim=e.target.value; rankQuery=''; rankSelected=null; $('#rankSearch').value=''; rebuildFilter(); render(); });
+$('#ordCompany').addEventListener('change', e=>{ syncCompany(e.target.value); renderOrder(); });
 $('#companySelect').addEventListener('change', e=>{
-  companyFilter = e.target.value;
+  syncCompany(e.target.value);
   // 회사를 바꾸면 기간 경계도 그 회사 자료에 맞춰 다시 잡는다
   const b = dataBounds();
   if (b) { const lo=fmtYMD(b.min), hi=fmtYMD(b.max);
@@ -1687,6 +1790,7 @@ $('#linkBtn').addEventListener('click', async ()=>{
   const c = await loadLink();
   $('#linkUrl').value = c ? c.url : '';
   $('#linkKey').value = c ? c.key : '';
+  $('#linkErp').value = (c && c.erpUrl) ? c.erpUrl : '';
   setLinkStatus(c ? `연결됨${c.name ? ' — ' + c.name : ''}` : '');
   $('#linkModal').classList.add('open');
   $('#linkUrl').focus();
@@ -1711,7 +1815,46 @@ $('#linkSave').addEventListener('click', async ()=>{
   if (n.error) { setLinkStatus('⚠ ' + n.error.split('\n')[0]); alert(n.error); return; }
   const key = $('#linkKey').value.trim();
   if (!key) { setLinkStatus('⚠ 열쇠를 넣어주세요.'); alert('열쇠를 넣어주세요.\n\nApps Script 에서 [설정] 을 실행하면 실행 로그에 나옵니다.'); return; }
-  await pullFromDrive({ url: n.url, key }, false);
+  const e = checkErpUrl($('#linkErp').value);
+  if (e.error) { setLinkStatus('⚠ 재고 주소: ' + e.error.split('\n')[0]); alert(e.error); return; }
+  const conn = { url: n.url, key, erpUrl: e.url };
+  const ok = await pullFromDrive(conn, false);
+  if (ok && e.url) {
+    setLinkStatus('재고도 가져오는 중…');
+    const c0 = (await loadLink()) || conn;
+    if (await pullStock(Object.assign({}, c0, { erpUrl: e.url }), false))
+      setLinkStatus(`✅ 판매 ${KRW.format(RAW.length)}건 · 재고 ${KRW.format(Object.keys(STOCK).length)}품목을 가져왔습니다.`);
+  }
+});
+/* ---------- 페이지 탭 ---------- */
+function showPage(name) {
+  $('#pageSales').hidden = name !== 'sales';
+  $('#pageOrder').hidden = name !== 'order';
+  [...$('#pageTabs').children].forEach(b => b.classList.toggle('is-on', b.dataset.page === name));
+  if (name === 'order') renderOrder();
+  else render();                                  // 숨겨진 동안 폭이 0이라 차트를 다시 그린다
+}
+$('#pageTabs').addEventListener('click', e => {
+  const b = e.target.closest('.ptab'); if (b) showPage(b.dataset.page);
+});
+['#ordWindow','#ordRisk','#ordRed','#ordAmber'].forEach(id =>
+  $(id).addEventListener('change', renderOrder));
+$('#ordSearch').addEventListener('input', renderOrder);
+$('#ordCopy').addEventListener('click', ()=>{
+  const text = orderTableText().map(r => r.join('\t')).join('\n');
+  $('#copyArea').value = text; $('#copyModal').classList.add('open');
+  $('#copyArea').focus(); $('#copyArea').select();
+});
+$('#ordExport').addEventListener('click', ()=>{
+  if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리를 불러오지 못했습니다.'); return; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(orderTableText()), '발주 필요');
+  const out = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+  const url = URL.createObjectURL(new Blob([out], { type:'application/octet-stream' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = `order-needed-${todayStr().replace(/[^\d]/g,'')}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 });
 $('#taxoBtn').addEventListener('click', ()=>$('#taxoInput').click());
 $('#taxoInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readTaxonomyFile(f); e.target.value=''; });
@@ -1795,7 +1938,7 @@ async function pullFromDrive(conn, quiet) {
     render('인식됨 — ' + notes.join(' · '), label);
     await saveData(label);
     showSavedNote(Date.now(), label);
-    await saveLink({ url, key, sig: full.지문, files: meta.files });
+    await saveLink(Object.assign({}, conn, { url, key, sig: full.지문, files: meta.files }));
     setLinkStatus(`✅ ${KRW.format(all.length)}건 · 파일 ${full.data.length}개를 가져왔습니다.`);
     return true;
   } catch (err) {
@@ -1805,6 +1948,155 @@ async function pullFromDrive(conn, quiet) {
   }
 }
 function setLinkStatus(msg) { const el = $('#linkStatus'); if (el) el.textContent = msg || ''; }
+
+/* ---------- 재고 연결 (구매요청 대시보드의 ERP 자료) ----------
+ * 구매요청 대시보드가 이카운트에서 매일 받아 구글시트에 쌓아 둔 재고를 그대로 읽는다.
+ * 응답은 { updatedAt, months, n, items:{ 품목코드:{ n:품목명, s:재고, k:품목구분 } } } 형태다.
+ * 새로 올릴 것도, 따로 계산할 것도 없다. */
+let STOCK = {}, stockMeta = null;
+function checkErpUrl(raw) {
+  const u = String(raw || '').trim();
+  if (!u) return { url: '' };                       // 비워두면 재고 연결 안 함
+  if (!/^https:\/\/script\.google(usercontent)?\.com\/macros\//.test(u))
+    return { error: '구매요청 대시보드의 Apps Script 주소여야 합니다.\n\nhttps://script.google.com/macros/s/... 로 시작해야 합니다.' };
+  if (!/\/exec\b/.test(u)) return { error: '주소가 /exec 로 끝나야 합니다.' };
+  return { url: u.split('?')[0] };
+}
+async function askErp(url, what) {
+  const q = `${url}?erp=${what}&t=${Date.now()}`;
+  let data;
+  try {
+    const res = await fetch(q, { method:'GET', mode:'cors', credentials:'omit', redirect:'follow', cache:'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+  } catch (e) {
+    data = await jsonpGet(q);                       // CORS 로 막히면 JSONP
+  }
+  // ?erp=data 는 그냥(JSON) 쓰면 본문만, JSONP 면 {ok,erp:본문} 로 온다
+  if (data && data.erp !== undefined) data = data.erp;
+  if (!data) throw new Error('재고 자료가 비어 있습니다. 구매요청 대시보드에서 ERP 갱신을 한 번 돌려주세요.');
+  return data;
+}
+async function pullStock(conn, quiet) {
+  const url = conn && conn.erpUrl;
+  if (!url) return false;
+  try {
+    const meta = await askErp(url, 'meta');
+    if (conn.erpVer && meta.ver === conn.erpVer && Object.keys(STOCK).length) return true;  // 그대로면 생략
+    const erp = await askErp(url, 'data');
+    const items = erp.items || {};
+    STOCK = {};
+    for (const code in items) {
+      const it = items[code];
+      if (it && it.s != null) STOCK[code] = { qty: it.s, name: it.n || '', kind: it.k || '' };
+    }
+    stockMeta = { updatedAt: erp.updatedAt || '', n: Object.keys(STOCK).length, ver: meta.ver || '' };
+    await saveStock(STOCK, stockMeta);
+    await saveLink(Object.assign({}, conn, { erpVer: meta.ver || '' }));
+    return true;
+  } catch (err) {
+    if (!quiet) alert('재고 가져오기 실패\n\n' + err.message);
+    console.warn('재고 가져오기 실패:', err);
+    return false;
+  }
+}
+
+/* ---------- 발주 필요 계산 ----------
+ * 월평균 판매량 = 선택한 최근 N개월 판매량 ÷ N
+ * 소진 예상(개월) = 재고 ÷ 월평균
+ * 재고가 없는 품목(ERP 에 없는 코드)은 판단할 수 없으므로 따로 센다. */
+function orderWindowMonths() { return +($('#ordWindow') || {}).value || 6; }
+function orderRows() {
+  const months = orderWindowMonths();
+  const b = dataBounds();
+  if (!b) return { rows: [], noStock: 0, months };
+  const hi = b.max;
+  const lo = new Date(hi.getFullYear(), hi.getMonth() - months + 1, 1);
+  const base = scoped().filter(r => r.date >= lo && r.date <= hi);
+
+  const byCode = new Map();
+  for (const r of base) {
+    const code = (r.code || '').trim();
+    if (!code) continue;
+    let g = byCode.get(code);
+    if (!g) { g = { code, name: r.product, qty: 0, amount: 0, company: r.company || '' }; byCode.set(code, g); }
+    g.qty += r.qty;
+    g.amount += (r.amounts && amountKey) ? (r.amounts[amountKey] || 0) : 0;
+    if (!g.name && r.product) g.name = r.product;
+  }
+
+  const red = parseFloat($('#ordRed').value), amber = parseFloat($('#ordAmber').value);
+  const out = []; let noStock = 0;
+  for (const g of byCode.values()) {
+    const st = STOCK[g.code];
+    if (!st) { noStock++; continue; }
+    const perMonth = g.qty / months;
+    const cover = perMonth > 0 ? st.qty / perMonth : Infinity;
+    const need3 = perMonth * 3;
+    const short = Math.max(0, Math.round(need3 - st.qty));
+    const level = perMonth <= 0 ? 0 : (cover < red ? 1 : cover < amber ? 2 : 3);
+    out.push({ ...g, stock: st.qty, kind: st.kind, perMonth, cover, need3, short, level,
+               category: categoryOf(g.name, g.code) });
+  }
+  // 급한 것부터: 위험 → 주의 → 나머지, 같은 등급이면 소진이 빠른 순
+  out.sort((a, b2) => (a.level === 0) - (b2.level === 0) || a.level - b2.level || a.cover - b2.cover);
+  return { rows: out, noStock, months };
+}
+function renderOrder() {
+  const { rows, noStock, months } = orderRows();
+  const risk = $('#ordRisk').value;
+  const q = ($('#ordSearch').value || '').trim().toLowerCase();
+  let list = rows.filter(r => risk === 'any' ? true : risk === 'red' ? r.level === 1 : (r.level === 1 || r.level === 2));
+  if (q) list = list.filter(r => (r.code + ' ' + r.name).toLowerCase().includes(q));
+
+  const nRed = rows.filter(r => r.level === 1).length, nAmber = rows.filter(r => r.level === 2).length;
+  const badge = $('#orderBadge');
+  badge.textContent = KRW.format(nRed + nAmber);
+  badge.hidden = !(nRed + nAmber);
+
+  const totalShort = list.reduce((s, r) => s + r.short, 0);
+  $('#ordKpis').innerHTML = `
+    <div class="kpi"><div class="label">위험 (소진 ${$('#ordRed').value}개월 미만)</div><div class="value" style="color:var(--risk-1)">${KRW.format(nRed)}<span class="unit">품목</span></div><div class="delta">지금 발주하지 않으면 끊깁니다</div></div>
+    <div class="kpi"><div class="label">주의 (${$('#ordAmber').value}개월 미만)</div><div class="value" style="color:var(--risk-2)">${KRW.format(nAmber)}<span class="unit">품목</span></div><div class="delta">곧 챙겨야 합니다</div></div>
+    <div class="kpi"><div class="label">3개월치 부족 수량</div><div class="value">${KRW.format(totalShort)}<span class="unit">개</span></div><div class="delta">지금 보이는 목록 합계</div></div>
+    <div class="kpi"><div class="label">재고 기준</div><div class="value" style="font-size:19px">${stockMeta ? stockMeta.updatedAt : '-'}</div><div class="delta">${stockMeta ? KRW.format(stockMeta.n) + '품목' : '재고 미연결'}</div></div>`;
+
+  $('#ordNote').innerHTML = stockMeta
+    ? `최근 <b>${months}개월</b> 판매 속도 기준 · 재고 ${KRW.format(stockMeta.n)}품목(${stockMeta.updatedAt} 기준)` +
+      (noStock ? ` · <span style="color:var(--muted)">판매는 있으나 ERP 재고에 없는 품목 ${KRW.format(noStock)}개는 제외</span>` : '')
+    : '⚠ 재고가 연결되지 않았습니다. <b>🔗 드라이브 연결</b> 창에서 구매요청 대시보드 주소를 넣어주세요.';
+
+  const head = ['품목코드','품목','상품분류','재고','월평균 판매','소진 예상','3개월 필요','부족 수량'];
+  $('#ordTable thead').innerHTML = '<tr>' + head.map((h, i) =>
+    `<th class="${i >= 3 ? 'num mono' : ''}">${h}</th>`).join('') + '</tr>';
+
+  if (!list.length) {
+    $('#ordTable tbody').innerHTML =
+      `<tr><td colspan="8"><div class="ordempty">${stockMeta ? '해당하는 품목이 없습니다. 재고가 넉넉합니다 👍' : '재고를 연결하면 여기에 발주 필요 품목이 나옵니다.'}</div></td></tr>`;
+    return;
+  }
+  const cls = ['r0','r1','r2','r3'], txt = ['판매 없음','위험','주의','여유'];
+  $('#ordTable tbody').innerHTML = list.map(r => `
+    <tr class="${r.level === 1 ? 'is-red' : ''}">
+      <td class="mono">${esc(r.code)}</td>
+      <td>${esc(r.name)}</td>
+      <td style="white-space:nowrap">${esc(r.category)}</td>
+      <td class="num mono">${KRW.format(Math.round(r.stock))}</td>
+      <td class="num mono">${KRW.format(Math.round(r.perMonth))}</td>
+      <td class="num mono"><span class="risk ${cls[r.level]}"><span class="dot"></span>${
+        r.level === 0 ? txt[0] : (isFinite(r.cover) ? r.cover.toFixed(1) + '개월' : '충분')}</span></td>
+      <td class="num mono">${KRW.format(Math.round(r.need3))}</td>
+      <td class="num mono ${r.short ? 'need' : ''}">${r.short ? KRW.format(r.short) : '-'}</td>
+    </tr>`).join('');
+}
+function orderTableText() {
+  const { rows } = orderRows();
+  const risk = $('#ordRisk').value;
+  const list = rows.filter(r => risk === 'any' ? true : risk === 'red' ? r.level === 1 : (r.level === 1 || r.level === 2));
+  const head = ['품목코드','품목','상품분류','재고','월평균 판매','소진 예상(개월)','3개월 필요','부족 수량'];
+  return [head].concat(list.map(r => [r.code, r.name, r.category, Math.round(r.stock),
+    Math.round(r.perMonth), isFinite(r.cover) ? +r.cover.toFixed(1) : '', Math.round(r.need3), r.short]));
+}
 
 /* ---------- 분류기준 읽기 ----------
  * "상품분류" 시트에서 품목코드 · 품목명 · 상품분류 를,
@@ -1987,6 +2279,25 @@ async function clearLink() {
   } catch (e) { console.warn(e); }
 }
 
+/* 재고도 같은 DB에 보관한다. 열 때마다 수천 품목을 다시 받지 않기 위함이다. */
+const STOCK_KEY = 'stock';
+async function saveStock(map, meta) {
+  try { const db = await idbOpen();
+    await new Promise(res => { const tx = db.transaction(STORE,'readwrite');
+      tx.objectStore(STORE).put({ map, meta, savedAt: Date.now() }, STOCK_KEY); tx.oncomplete = res; });
+    db.close();
+  } catch (e) { console.warn('재고 보관 실패:', e); }
+}
+async function loadStock() {
+  try { const db = await idbOpen();
+    const got = await new Promise((res, rej) => { const tx = db.transaction(STORE,'readonly');
+      const q = tx.objectStore(STORE).get(STOCK_KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    db.close();
+    if (got && got.map) { STOCK = got.map; stockMeta = got.meta || null; return true; }
+    return false;
+  } catch (e) { return false; }
+}
+
 /* 분류기준도 같은 DB에 따로 보관한다(판매 데이터를 지워도 분류기준은 남는다) */
 const TAXO_KEY = 'taxonomy';
 async function saveTaxonomy(t, fname) {
@@ -2020,6 +2331,29 @@ async function clearTaxonomy() {
   } catch (e) { console.warn(e); }
 }
 
+/* 재고: 보관본을 먼저 띄우고, 연결돼 있으면 최신으로 덮는다 */
+async function refreshStock(conn) {
+  await loadStock();
+  if (!$('#pageOrder').hidden) renderOrder();
+  if (conn && conn.erpUrl) {
+    const fresh = await pullStock(conn, true);
+    if (fresh && !$('#pageOrder').hidden) renderOrder();
+    if (fresh) updateOrderBadge();
+  } else {
+    updateOrderBadge();
+  }
+}
+/* 탭 뱃지는 발주 탭을 열지 않아도 보여야 한다 */
+function updateOrderBadge() {
+  const badge = $('#orderBadge');
+  if (!RAW.length || !Object.keys(STOCK).length) { badge.hidden = true; return; }
+  try {
+    const { rows } = orderRows();
+    const n = rows.filter(r => r.level === 1 || r.level === 2).length;
+    badge.textContent = KRW.format(n); badge.hidden = !n;
+  } catch (e) { badge.hidden = true; }
+}
+
 /* ---------- 시작 ---------- */
 (async () => {
   // 분류기준을 판매 데이터보다 먼저 올려야 처음 그릴 때부터 분류가 맞는다
@@ -2034,10 +2368,12 @@ async function clearTaxonomy() {
     // 드라이브를 연결해 뒀다면 백그라운드로 최신 파일을 받아 덮어쓴다.
     // 실패해도 보관본이 이미 그려져 있으므로 조용히 넘어간다.
     const conn = await loadLink();
-    if (conn) pullFromDrive(conn, true);
+    if (conn) pullFromDrive(conn, true).then(()=>refreshStock(conn));
+    else refreshStock(null);
   } else {
     const conn = await loadLink();
-    if (conn && await pullFromDrive(conn, true)) return;   // 연결돼 있으면 샘플 대신 드라이브를 쓴다
+    if (conn && await pullFromDrive(conn, true)) { refreshStock(conn); return; }
+    refreshStock(conn);
     RAW = makeSampleData();
     window.__lastMapping = '<b>샘플 데이터</b> — 상단의 “엑셀/CSV 업로드”로 이카운트 판매현황 파일을 올려보세요.';
     setupDims();
