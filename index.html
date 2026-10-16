@@ -202,6 +202,7 @@
     </div>
     <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
     <input type="file" id="taxoInput" accept=".xlsx,.xls,.csv" hidden>
+    <button class="sync-btn" id="spBtn" title="쉐어포인트 MMS 폴더에서 두 회사 판매현황(2022년~)을 받아옵니다. 연결해 두면 열 때마다 최신으로 바뀝니다">☁ 쉐어포인트</button>
     <button class="sync-btn" id="linkBtn" title="구글 드라이브 폴더에서 판매현황을 받아옵니다">🔗 드라이브 연결</button>
     <button class="sync-btn" id="uploadBtn" title="판매현황 엑셀을 직접 올립니다">📂 엑셀 업로드</button>
     <button class="sync-btn" id="taxoBtn" title="상품분류 기준표를 올립니다">🏷 분류기준</button>
@@ -674,6 +675,7 @@ function 응답_(callback, obj) {
 }
 </textarea>
 <script src="./vendor/xlsx.min.js"></script>
+<script src="./mms-sharepoint.js"></script>
 <script>
 /* ================================================================
  *  판매현황 대시보드
@@ -749,7 +751,7 @@ const DICT = {
   amt:  ['공급가액','매출액','판매금액','매출','합계금액','합계','금액','amount','sales','revenue'],
   prod: ['품목명','제품명','상품명','품명','품목','제품','상품','item','product'],
   code: ['품목코드','제품코드','상품코드','품번','품목번호','코드','sku','item code'],
-  cust: ['거래처명','거래처','매출처','고객명','고객','client','customer','account'],
+  cust: ['거래처명','거래처','판매처명','판매처','매출처','고객명','고객','client','customer','account'],
 };
 // 부가세/단가처럼 매출로 오해하기 쉬운 열은 매출 후보에서 제외
 const AMT_EXCLUDE = ['부가세','vat','세액','단가','unit','원가','잔액','미수'];
@@ -1683,6 +1685,13 @@ $('#fileInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f)
     render();                                  // 차트는 색을 직접 쓰므로 다시 그린다
   });
 })();
+$('#spBtn').addEventListener('click', async ()=>{
+  const st = spState();
+  if (!(st && st.on) && !confirm('쉐어포인트 MMS 폴더에서 두 회사 판매현황(2022년~)을 가져올까요?\n\n회사 마이크로소프트 계정으로 로그인합니다.\n연결해 두면 다음부터 열 때마다 자동으로 최신으로 바뀝니다.')) return;
+  const btn = $('#spBtn'); const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '☁ 가져오는 중…';
+  try { await pullFromSharePoint(true); } finally { btn.disabled = false; btn.textContent = old; }
+});
 $('#linkBtn').addEventListener('click', async ()=>{
   const c = await loadLink();
   $('#linkUrl').value = c ? c.url : '';
@@ -1717,6 +1726,64 @@ $('#taxoBtn').addEventListener('click', ()=>$('#taxoInput').click());
 $('#taxoInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readTaxonomyFile(f); e.target.value=''; });
 $('#sampleBtn').addEventListener('click', ()=>{ RAW=makeSampleData(); window.__lastMapping='<b>샘플 데이터</b> (상품 6종 · 거래처 6곳)'; setupDims(); render('샘플 데이터 (상품 6종 · 거래처 6곳 · 약 18개월)'); });
 window.addEventListener('resize', ()=>render());
+
+/* ---------- 쉐어포인트(MMS) 연결 ----------
+ * 사내 로컬PC(MMS)가 매시간 이카운트 판매현황을 쉐어포인트 MMS/<회사>/판매현황_전체 에 올린다(2022년~).
+ * 회사 계정으로 로그인해 두 회사 파일을 받아 합친다. 파일이 그대로면(eTag 같음) 다시 받지 않는다.
+ * 연결 여부·마지막 eTag 는 이 브라우저(localStorage)에만 둔다. */
+const SP_KEY = 'mmsSalesSp';
+function spState() { try { return JSON.parse(localStorage.getItem(SP_KEY) || 'null'); } catch (e) { return null; } }
+function spSave(st) { try { st ? localStorage.setItem(SP_KEY, JSON.stringify(st)) : localStorage.removeItem(SP_KEY); } catch (e) {} }
+function spReadRows(bytes) {
+  const wb = XLSX.read(new Uint8Array(bytes), { type: 'array', cellDates: true });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' });
+}
+async function pullFromSharePoint(interactive) {
+  if (!window.MmsSp) { if (interactive) alert('mms-sharepoint.js 를 불러오지 못했습니다'); return false; }
+  try {
+    if (interactive) await MmsSp.token(true);          // 로그인 창은 버튼을 누른 직후에 띄워야 막히지 않는다
+    const prev = spState() || {};
+    const paths = MmsSp.COMPANIES.map(co => ({ co, path: MmsSp.reportPath(co, '판매현황_전체') }));
+    const metas = [];
+    for (const f of paths) {
+      try { metas.push({ ...f, meta: await MmsSp.meta(f.path, false) }); }
+      catch (e) { if (e.status === 404) continue; throw e; }   // 판매현황을 받지 않는 회사는 건너뛴다
+    }
+    if (!metas.length) throw new Error('쉐어포인트 MMS 폴더에서 판매현황_전체 파일을 찾지 못했습니다');
+    const etags = Object.fromEntries(metas.map(m => [m.co, m.meta.eTag]));
+    if (RAW.length && prev.on && JSON.stringify(prev.etags) === JSON.stringify(etags)) {
+      if (interactive) alert('이미 최신입니다 — 쉐어포인트 판매현황이 바뀌지 않았습니다.');
+      return true;
+    }
+    const all = [], notes = [];
+    for (const m of metas) {
+      const got = await MmsSp.download(m.path, false);
+      const res = ingestRows(spReadRows(got.bytes));
+      for (const r of res.data) r.company = m.co;
+      all.push(...res.data);
+      notes.push(`${m.co} <b>${KRW.format(res.data.length)}건</b>`);
+    }
+    all.sort((a, b) => a.date - b.date);
+    RAW = all;
+    const newest = metas.map(m => new Date(m.meta.lastModifiedDateTime)).sort((a, b) => b - a)[0];
+    const p = n => String(n).padStart(2, '0');
+    const label = `쉐어포인트 MMS (${newest.getMonth() + 1}/${newest.getDate()} ${p(newest.getHours())}:${p(newest.getMinutes())} 기준)`;
+    window.__fname = label;
+    setupDims();
+    render('인식됨 — ' + notes.join(' · '), label);
+    await saveData(label);
+    showSavedNote(Date.now(), label);
+    spSave({ on: true, etags });
+    return true;
+  } catch (err) {
+    console.warn('쉐어포인트 판매현황 가져오기 실패:', err);
+    if (interactive) {
+      const t = MmsSp.errorText(err);
+      if (t) alert('쉐어포인트 가져오기 실패\n\n' + t);
+    }
+    return false;
+  }
+}
 
 /* ---------- 구글 드라이브 연결 ----------
  * 드라이브 폴더의 판매현황 파일을 Apps Script 웹 앱이 읽어서 넘겨준다.
@@ -1959,7 +2026,7 @@ function showSavedNote(savedAt, fname) {
     (fname ? ` · ${fname}` : '') + ` <button class="btn ghost sm" id="clearSaved">지우기</button>`;
   $('#clearSaved').addEventListener('click', async () => {
     if (!confirm('보관된 판매 데이터를 지울까요?\n(다시 보려면 엑셀을 새로 올려야 합니다)')) return;
-    await clearSavedData(); location.reload();
+    await clearSavedData(); spSave(null); location.reload();
   });
 }
 
@@ -2033,9 +2100,13 @@ async function clearTaxonomy() {
     showSavedNote(saved.savedAt, saved.fname);
     // 드라이브를 연결해 뒀다면 백그라운드로 최신 파일을 받아 덮어쓴다.
     // 실패해도 보관본이 이미 그려져 있으므로 조용히 넘어간다.
+    const sp = spState();
+    if (sp && sp.on) { pullFromSharePoint(false); return; }   // 쉐어포인트 연결 중이면 드라이브는 보지 않는다
     const conn = await loadLink();
     if (conn) pullFromDrive(conn, true);
   } else {
+    const sp = spState();
+    if (sp && sp.on && await pullFromSharePoint(false)) return;
     const conn = await loadLink();
     if (conn && await pullFromDrive(conn, true)) return;   // 연결돼 있으면 샘플 대신 드라이브를 쓴다
     RAW = makeSampleData();
