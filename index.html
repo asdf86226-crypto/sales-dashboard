@@ -1690,7 +1690,7 @@ $('#spBtn').addEventListener('click', async ()=>{
   if (!(st && st.on) && !confirm('쉐어포인트 MMS 폴더에서 두 회사 판매현황(2022년~)을 가져올까요?\n\n회사 마이크로소프트 계정으로 로그인합니다.\n연결해 두면 다음부터 열 때마다 자동으로 최신으로 바뀝니다.')) return;
   const btn = $('#spBtn'); const old = btn.textContent;
   btn.disabled = true; btn.textContent = '☁ 가져오는 중…';
-  try { await pullFromSharePoint(true); } finally { btn.disabled = false; btn.textContent = old; }
+  try { await pullFromSharePoint(true); } finally { btn.disabled = false; }   // 글자는 pullFromSharePoint 가 되돌린다
 });
 $('#linkBtn').addEventListener('click', async ()=>{
   const c = await loadLink();
@@ -1738,8 +1738,16 @@ function spReadRows(bytes) {
   const wb = XLSX.read(new Uint8Array(bytes), { type: 'array', cellDates: true });
   return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' });
 }
+// 열 때 자동으로 받는 동안 버튼에 표시 — 받는 몇 초 동안은 지난번 자료가 보이므로
+function spBtnState(text, title) {
+  const b = $('#spBtn'); if (!b) return;
+  b.textContent = text;
+  if (title) b.title = title;
+}
 async function pullFromSharePoint(interactive) {
   if (!window.MmsSp) { if (interactive) alert('mms-sharepoint.js 를 불러오지 못했습니다'); return false; }
+  let ok = false;
+  if (!interactive) spBtnState('☁ 최신 확인 중…');
   try {
     if (interactive) await MmsSp.token(true);          // 로그인 창은 버튼을 누른 직후에 띄워야 막히지 않는다
     const prev = spState() || {};
@@ -1753,6 +1761,7 @@ async function pullFromSharePoint(interactive) {
     const etags = Object.fromEntries(metas.map(m => [m.co, m.meta.eTag]));
     if (RAW.length && prev.on && JSON.stringify(prev.etags) === JSON.stringify(etags)) {
       if (interactive) alert('이미 최신입니다 — 쉐어포인트 판매현황이 바뀌지 않았습니다.');
+      ok = true;
       return true;
     }
     const all = [], notes = [];
@@ -1774,14 +1783,18 @@ async function pullFromSharePoint(interactive) {
     await saveData(label);
     showSavedNote(Date.now(), label);
     spSave({ on: true, etags });
+    ok = true;
     return true;
   } catch (err) {
     console.warn('쉐어포인트 판매현황 가져오기 실패:', err);
+    if (!interactive) spBtnState('☁ 다시 연결', '최신 자료를 자동으로 받지 못했습니다 — 눌러서 다시 받으세요 (' + (MmsSp.errorText(err) || '로그인 필요') + ')');
     if (interactive) {
       const t = MmsSp.errorText(err);
       if (t) alert('쉐어포인트 가져오기 실패\n\n' + t);
     }
     return false;
+  } finally {
+    if (ok || interactive) spBtnState('☁ 쉐어포인트', '쉐어포인트 MMS 폴더에서 두 회사 판매현황(2022년~)을 받아옵니다. 연결해 두면 열 때마다 최신으로 바뀝니다');
   }
 }
 
