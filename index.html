@@ -203,7 +203,6 @@
     <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
     <input type="file" id="taxoInput" accept=".xlsx,.xls,.csv" hidden>
     <button class="sync-btn" id="spBtn" title="쉐어포인트 MMS 폴더에서 두 회사 판매현황(2022년~)을 받아옵니다. 연결해 두면 열 때마다 최신으로 바뀝니다">☁ 쉐어포인트</button>
-    <button class="sync-btn" id="linkBtn" title="구글 드라이브 폴더에서 판매현황을 받아옵니다">🔗 드라이브 연결</button>
     <button class="sync-btn" id="uploadBtn" title="판매현황 엑셀을 직접 올립니다">📂 엑셀 업로드</button>
     <button class="sync-btn" id="taxoBtn" title="상품분류 기준표를 올립니다">🏷 분류기준</button>
     <button class="sync-btn" id="reportBtn" title="지금 화면을 담은 보고서 파일을 만듭니다">📤 보고용 공유</button>
@@ -332,35 +331,6 @@
 
 <div class="tooltip" id="tooltip"></div>
 
-<div class="modal-bg" id="linkModal">
-  <div class="modal">
-    <h3>구글 드라이브에서 자동으로 가져오기</h3>
-    <p>연결해 두면 <b>드라이브 폴더에 판매현황 파일을 덮어쓰기만</b> 하면 됩니다.
-       대시보드를 열 때마다 알아서 최신 파일을 받아옵니다. 구매요청 대시보드와 같은 방식입니다.</p>
-    <ol class="steps">
-      <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> 에서 <b>새 프로젝트</b> 만들기</li>
-      <li>아래 <b>📋 스크립트 복사</b> 를 눌러 받은 코드를 붙여넣고 저장</li>
-      <li>함수 목록에서 <b>설정</b> 을 골라 <b>▷ 실행</b> (권한 승인)
-          → 실행 로그에 <b>열쇠</b>가 나옵니다</li>
-      <li><b>배포 → 새 배포 → 웹 앱</b>, 실행 계정 <b>나</b> / 액세스 <b>모든 사용자</b> → 배포</li>
-      <li>나온 <b>웹 앱 URL</b> 과 <b>열쇠</b> 를 아래에 붙여넣기</li>
-    </ol>
-    <p class="ok-note">🔒 열쇠는 스크립트에만 있고 이 대시보드 저장소에는 없습니다.
-       <b>열쇠가 없으면 주소를 알아도 데이터를 받아갈 수 없습니다.</b></p>
-    <input id="linkUrl" type="url" spellcheck="false" autocomplete="off"
-           placeholder="웹 앱 URL — https://script.google.com/macros/s/AKfy.../exec">
-    <input id="linkKey" type="text" spellcheck="false" autocomplete="off" style="margin-top:8px"
-           placeholder="열쇠 — 실행 로그에 나온 긴 문자열">
-    <p class="meta" id="linkStatus"></p>
-    <div class="row">
-      <button class="btn ghost" id="linkCopyScript">📋 스크립트 복사</button>
-      <button class="btn ghost" id="linkRemove">연결 끊기</button>
-      <button class="btn ghost" id="linkClose">닫기</button>
-      <button class="btn" id="linkSave">연결하고 가져오기</button>
-    </div>
-  </div>
-</div>
-
 <div class="modal-bg" id="copyModal">
   <div class="modal">
     <h3>표 복사</h3>
@@ -374,306 +344,6 @@
 </div>
 
 
-<!-- 드라이브 연결용 Apps Script 원본. <script> 는 raw text 라 &amp; 가 그대로 남으므로
-     문자 참조를 디코드하는 <textarea> 에 담는다. -->
-<textarea id="feedScript" hidden readonly aria-hidden="true">/**
- * 판매현황 배달부 (Google Apps Script)
- * ------------------------------------------------------------------
- * 구글 드라이브 폴더에 있는 판매현황 파일을 읽어 대시보드에 그대로 넘겨준다.
- * 드라이브에 파일만 덮어쓰면 대시보드가 알아서 최신 내용을 받아간다.
- *
- * 최초 1회
- *   1) script.google.com → 새 프로젝트 → 이 코드를 전부 붙여넣고 저장
- *   2) 함수 목록에서 [설정] 을 골라 실행 (구글 권한 승인 필요)
- *      → 실행 로그에 "폴더 주소" 와 "열쇠" 가 나온다
- *   3) 배포 → 새 배포 → 유형: 웹 앱
- *        실행 계정: 나
- *        액세스 권한: 모든 사용자          ← 열쇠로 막으므로 이렇게 둬야 한다
- *      → 배포 후 나오는 웹 앱 URL 복사
- *   4) 대시보드 [🔗 드라이브 연결] 에 URL 과 열쇠를 붙여넣기
- *
- * 그다음부터는 드라이브 폴더에 판매현황 파일을 덮어쓰기만 하면 된다.
- *
- * 주의: 열쇠는 이 스크립트 속성에만 있고 대시보드 저장소에는 없다.
- *       열쇠가 없으면 URL 을 알아도 아무것도 받아갈 수 없다.
- */
-
-// 판매 파일이 들어 있는 폴더. 하위 폴더까지 뒤지므로 맨 위 폴더를 적으면 된다.
-// 폴더 ID 를 직접 넣어도 된다(드라이브 주소 .../folders/여기부분).
-var FOLDER_NAME = 'ERP 자료(판매/구매)';
-var FOLDER_ID = '';                                  // 이름으로 못 찾을 때만 쓴다
-var FOLDER_ALT = ['판매량', '구매요청 ERP 자료'];      // 예전 이름들
-var P = PropertiesService.getScriptProperties();
-
-/** 최초 1회 실행 — 폴더를 찾고 열쇠를 만든다 */
-function 설정() {
-  var f = 폴더_();
-  var key = P.getProperty('SALES_KEY');
-  if (!key) { key = Utilities.getUuid().replace(/-/g, ''); P.setProperty('SALES_KEY', key); }
-
-  var picked = '';
-  try {
-    var hits = 판매파일들_(f);
-    picked = hits.length
-      ? '\n' + hits.map(function (x) {
-          return '  · ' + x.getName() + '  [' + 회사_(x.getName()) + ']  (' + 날짜_(x.getLastUpdated()) + ' 수정)';
-        }).join('\n')
-      : ' 못 찾음';
-  } catch (e) { picked = ' 확인 실패 — ' + e.message; }
-
-  var m = '[준비 끝]\n\n폴더 : ' + f.getName() + '\n       ' + f.getUrl()
-        + '\n\n폴더 안의 파일 :\n  · ' + 폴더안_(f).join('\n  · ')
-        + '\n\n읽을 판매 파일 ' + (picked.indexOf('\n') === 0 ? '(' + 판매파일들_(f).length + '개) :' : ':') + picked
-        + '\n\n열쇠 : ' + key
-        + '\n\n이제 [배포 → 새 배포 → 웹 앱] 으로 배포하고,'
-        + '\n웹 앱 URL 과 위 열쇠를 대시보드에 넣으세요.';
-  Logger.log(m);
-  return m;
-}
-
-/** 열쇠를 새로 만든다(유출됐을 때). 대시보드에 새 열쇠를 다시 넣어야 한다. */
-function 열쇠_새로만들기() {
-  var key = Utilities.getUuid().replace(/-/g, '');
-  P.setProperty('SALES_KEY', key);
-  Logger.log('새 열쇠 : ' + key + '\n\n대시보드에 다시 넣어주세요. 이전 열쇠는 즉시 막힙니다.');
-  return key;
-}
-
-function doGet(e) {
-  var p = (e &amp;&amp; e.parameter) || {};
-  try {
-    if (p.key !== P.getProperty('SALES_KEY')) return 응답_(p.callback, { ok: false, error: '열쇠가 맞지 않습니다.' });
-
-    var f = 폴더_();
-    var files = 판매파일들_(f);
-    if (!files.length) {
-      // 왜 못 찾았는지 알 수 있게 폴더에 뭐가 있는지 그대로 알려준다
-      var 전부 = 폴더안_(f);
-      return 응답_(p.callback, { ok: false, error:
-        '폴더에서 판매현황 파일을 찾지 못했습니다.\n\n' +
-        '폴더: ' + f.getName() + '\n' +
-        (전부.length ? '안에 있는 파일 ' + 전부.length + '개:\n · ' + 전부.join('\n · ')
-                     : '폴더가 비어 있습니다.') +
-        '\n\n판매 자료 파일 이름에 "판매" 나 "매출" 이 들어가야 합니다.' });
-    }
-
-    // 파일 목록과 수정시각 = 바뀌었는지 판단하는 지문
-    var list = files.map(function (x) {
-      return { name: x.getName(), company: 회사_(x.getName()), updated: x.getLastUpdated().getTime() };
-    });
-    var meta = { ok: true, folder: f.getUrl(), files: list, 지문: 지문_(list) };
-    if (p.sales === 'meta') return 응답_(p.callback, meta);          // 바뀌었는지만 싸게 확인
-
-    // 파일마다 열 구성이 다를 수 있으므로 합치지 않고 따로 넘긴다.
-    // (대시보드가 파일별로 열을 인식한 뒤 합친다)
-    var out = [], total = 0;
-    for (var i = 0; i &lt; files.length; i++) {
-      var rows = 행읽기_(files[i]);
-      if (!rows || !rows.length) continue;
-      total += rows.length - 1;
-      out.push({ name: list[i].name, company: list[i].company, updated: list[i].updated, rows: rows });
-    }
-    if (!out.length) return 응답_(p.callback, { ok: false, error: '파일에서 읽을 내용이 없습니다.' });
-    meta.data = out;
-    meta.n = total;
-    return 응답_(p.callback, meta);
-  } catch (err) {
-    return 응답_(p.callback, { ok: false, error: String(err &amp;&amp; err.message || err) });
-  }
-}
-
-/* ---------- 폴더 · 파일 찾기 ---------- */
-function 폴더_() {
-  if (FOLDER_ID) { try { return DriveApp.getFolderById(FOLDER_ID); } catch (e) {} }
-  var id = P.getProperty('SALES_FOLDER');
-  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  var names = [FOLDER_NAME].concat(FOLDER_ALT);
-  for (var i = 0; i &lt; names.length; i++) {
-    var it = DriveApp.getFoldersByName(names[i]);
-    if (it.hasNext()) { var f = it.next(); P.setProperty('SALES_FOLDER', f.getId()); return f; }
-  }
-  throw new Error('"' + FOLDER_NAME + '" 폴더를 찾지 못했습니다.\n' +
-                  '스크립트 맨 위 FOLDER_NAME 을 실제 폴더 이름으로 고치거나,\n' +
-                  'FOLDER_ID 에 폴더 주소의 /folders/ 뒤 부분을 넣어주세요.');
-}
-
-/** 폴더와 그 하위 폴더를 모두 훑어 파일을 모은다.
- *  판매 파일을 "판매량" 같은 하위 폴더에 정리해 두어도 찾아내기 위함이다. */
-function 모든파일_(folder, depth, acc, seenFolder) {
-  acc = acc || []; depth = depth == null ? 4 : depth; seenFolder = seenFolder || {};
-  var fid = folder.getId();
-  if (seenFolder[fid] || acc.length &gt; 500) return acc;
-  seenFolder[fid] = 1;
-  var it = folder.getFiles();
-  while (it.hasNext() &amp;&amp; acc.length &lt;= 500) acc.push(it.next());
-  if (depth &gt; 0) {
-    var subs = folder.getFolders();
-    while (subs.hasNext()) 모든파일_(subs.next(), depth - 1, acc, seenFolder);
-  }
-  return acc;
-}
-
-/** 이름에 판매·매출이 들어간 파일을 "전부" 고른다.
- *  회사·연도별로 여러 개를 넣어두면(태성정밀 25년 / 플로우텍 26년 …) 모두 합쳐 본다. */
-function 판매파일들_(folder) {
-  var all = 모든파일_(folder), hit = [], seen = {};
-  for (var i = 0; i &lt; all.length; i++) {
-    var f = all[i], nm = f.getName();
-    if (nm.charAt(0) === '~') continue;                                  // 엑셀 임시파일
-    if (!표파일_(f)) continue;
-    if (!/판매|매출|sales/i.test(nm)) continue;                           // 판매 자료만
-    if (/재고|bom|소요량|품목등록|기준정보|구매요청/i.test(nm)) continue;   // 다른 용도
-    if (seen[nm]) continue;                                              // 같은 이름 중복 합산 방지
-    seen[nm] = 1;
-    hit.push(f);
-  }
-  hit.sort(function (a, b) { return a.getName() &lt; b.getName() ? -1 : 1; });
-  return hit;
-}
-
-/** 폴더와 하위 폴더에 뭐가 들었는지 (진단용) */
-function 폴더안_(folder) {
-  var all = 모든파일_(folder), out = [];
-  for (var i = 0; i &lt; all.length &amp;&amp; out.length &lt; 40; i++) {
-    var f = all[i];
-    out.push(f.getName() + '   [' + (표파일_(f) ? '표' : f.getMimeType()) + ']');
-  }
-  return out;
-}
-
-/** 읽을 수 있는 표 파일인가 — 확장자가 없는 구글시트도 포함 */
-function 표파일_(f) {
-  var nm = f.getName(), mt = f.getMimeType();
-  return /\.(xlsx|csv|tsv|txt)$/i.test(nm)
-      || mt === 'application/vnd.google-apps.spreadsheet'
-      || mt === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      || mt === 'text/csv' || mt === 'text/plain';
-}
-
-/** 파일 이름에서 회사를 뽑는다. "태성정밀 26년 판매량.xlsx" → "태성정밀"
- *  연도가 앞에 와도("25년 태성정밀 판매량"), 붙여 써도("태성정밀25년판매량"),
- *  법인 표기가 있어도("태성정밀(주)") 같은 회사로 묶이게 한다. */
-function 회사_(name) {
-  var s = String(name).replace(/\.[^.]+$/, '');            // 확장자 제거
-  s = s.replace(/㈜|\(주\)|\(株\)|주식회사/g, ' ');         // 법인 표기 제거 — 안 하면 따로 집계된다
-  var parts = s.split(/[\s_\-·,()\[\]]+/);
-  for (var i = 0; i &lt; parts.length; i++) {
-    var t = parts[i];
-    if (!t) continue;
-    if (/^\d+\s*년?$/.test(t)) continue;                   // 23년 · 2026 같은 연도 토막
-    t = t.replace(/(판매량|판매현황|판매내역|판매|매출현황|매출|내역|현황)/g, '');
-    t = t.replace(/\d+\s*년?$/, '').trim();                // "태성정밀25년" 처럼 꼬리에 붙은 연도
-    if (t) return t;
-  }
-  return '(미지정)';
-}
-
-/** 파일 목록 + 수정시각을 한 줄로 — 이게 바뀌면 다시 받는다 */
-function 지문_(list) {
-  return list.map(function (x) { return x.name + '@' + x.updated; }).join('|');
-}
-
-/* ---------- 파일 읽기 (구매요청 대시보드와 같은 방식) ---------- */
-function 행읽기_(f) {
-  var mt = f.getMimeType(), nm = f.getName(), low = nm.toLowerCase();
-  if (mt === 'application/vnd.google-apps.spreadsheet')
-    return SpreadsheetApp.openById(f.getId()).getSheets()[0].getDataRange().getDisplayValues();
-  if (/\.(csv|tsv|txt)$/.test(low) || mt === 'text/csv' || mt === 'text/plain')
-    return Utilities.parseCsv(f.getBlob().getDataAsString('UTF-8').replace(/^﻿/, ''));
-  if (/\.xlsx$/.test(low) || mt === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    return xlsx_(f.getBlob());
-  if (/\.xls$/.test(low)) throw new Error('옛 .xls 형식입니다 — .xlsx 나 CSV 로 저장해 주세요');
-  throw new Error('읽을 수 없는 형식입니다: ' + nm);
-}
-
-// .xlsx 는 zip 이다. 드라이브 변환을 거치지 않고 여기서 바로 풀어 읽는다.
-function xlsx_(blob) {
-  var parts;
-  try { parts = Utilities.unzip(blob.setContentType('application/zip')); }
-  catch (e) { throw new Error('엑셀 파일을 여는 데 실패했습니다 — CSV 로 저장해 올려주세요'); }
-  var map = {};
-  for (var i = 0; i &lt; parts.length; i++) map[parts[i].getName()] = parts[i];
-  var get = function (n) { return map[n] ? map[n].getDataAsString('UTF-8') : ''; };
-
-  // 공유 문자열
-  var shared = [], ssx = get('xl/sharedStrings.xml');
-  if (ssx) {
-    var si = /&lt;si\b[^&gt;]*&gt;([\s\S]*?)&lt;\/si&gt;/g, m;
-    while ((m = si.exec(ssx))) {
-      var s = '', t = /&lt;t\b[^&gt;]*&gt;([\s\S]*?)&lt;\/t&gt;/g, x;
-      while ((x = t.exec(m[1]))) s += x[1];
-      shared.push(unesc_(s));
-    }
-  }
-  // 날짜 서식 (cellStyleXfs 가 아니라 cellXfs 안의 xf 만)
-  var dateStyle = [], stx = get('xl/styles.xml');
-  if (stx) {
-    var fmt = {}, fr = /&lt;numFmt\b[^&gt;]*numFmtId="(\d+)"[^&gt;]*formatCode="([^"]*)"/g, f2;
-    while ((f2 = fr.exec(stx))) fmt[f2[1]] = unesc_(f2[2]);
-    var isDate = function (id) {
-      var k = +id; if ((k &gt;= 14 &amp;&amp; k &lt;= 22) || (k &gt;= 45 &amp;&amp; k &lt;= 47)) return true;
-      var c = fmt[id];
-      return c ? /[dmy]/i.test(c.replace(/\[[^\]]*\]/g, '').replace(/"[^"]*"/g, '')) : false;
-    };
-    var cx = stx.match(/&lt;cellXfs\b[\s\S]*?&lt;\/cellXfs&gt;/);
-    if (cx) { var xr = /&lt;xf\b[^&gt;]*&gt;/g, xx, i2 = 0;
-      while ((xx = xr.exec(cx[0]))) { var id = (xx[0].match(/numFmtId="(\d+)"/) || [])[1] || '0'; dateStyle[i2++] = isDate(id); } }
-  }
-  var names = [];
-  for (var k in map) if (/^xl\/worksheets\/sheet\d+\.xml$/.test(k)) names.push(k);
-  if (!names.length) throw new Error('워크시트를 찾을 수 없습니다');
-  names.sort();
-
-  var xml = get(names[0]), rows = [];
-  var rr = /&lt;row\b[^&gt;]*&gt;([\s\S]*?)&lt;\/row&gt;/g, cr = /&lt;c\b([^&gt;]*?)(?:\/&gt;|&gt;([\s\S]*?)&lt;\/c&gt;)/g, r;
-  while ((r = rr.exec(xml))) {
-    var cells = [], c; cr.lastIndex = 0;
-    while ((c = cr.exec(r[1]))) {
-      var at = c[1] || '', body = c[2] || '';
-      var ref = (at.match(/r="([A-Z]+)/) || [])[1] || '';
-      var tt = (at.match(/t="([^"]*)"/) || [])[1] || '';
-      var st = (at.match(/s="(\d+)"/) || [])[1];
-      var col; if (ref) { col = 0; for (var q = 0; q &lt; ref.length; q++) col = col * 26 + (ref.charCodeAt(q) - 64); col--; } else col = cells.length;
-      var val = '';
-      if (tt === 's') { var v = (body.match(/&lt;v&gt;([\s\S]*?)&lt;\/v&gt;/) || [])[1]; val = shared[+v] || ''; }
-      else if (tt === 'inlineStr') { var s2 = '', tr = /&lt;t\b[^&gt;]*&gt;([\s\S]*?)&lt;\/t&gt;/g, tm;
-        while ((tm = tr.exec(body))) s2 += tm[1]; val = unesc_(s2); }
-      else { var v2 = (body.match(/&lt;v&gt;([\s\S]*?)&lt;\/v&gt;/) || [])[1];
-        var raw = (v2 == null) ? '' : unesc_(v2);
-        val = (raw !== '' &amp;&amp; st != null &amp;&amp; dateStyle[+st]) ? serial_(+raw) : raw; }
-      cells[col] = val;
-    }
-    for (var j = 0; j &lt; cells.length; j++) if (cells[j] == null) cells[j] = '';
-    rows.push(cells);
-  }
-  return rows;
-}
-
-function unesc_(s) {
-  if (s.indexOf('&amp;') &lt; 0) return s;
-  return s.replace(/&amp;(lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, function (m, e) {
-    if (e === 'lt') return '&lt;'; if (e === 'gt') return '&gt;'; if (e === 'amp') return '&amp;';
-    if (e === 'quot') return '"'; if (e === 'apos') return "'";
-    if (e.charAt(0) === '#') { var n = e.charAt(1) === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1);
-      return isFinite(n) ? String.fromCharCode(n) : m; }
-    return m;
-  });
-}
-function serial_(n) {
-  var d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
-  return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
-}
-function 날짜_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'); }
-
-/* ---------- 응답 ----------
- * 브라우저가 CORS 로 막는 경우를 대비해 JSONP(callback) 도 함께 지원한다. */
-function 응답_(callback, obj) {
-  var body = JSON.stringify(obj);
-  if (callback) return ContentService.createTextOutput(callback + '(' + body + ')')
-    .setMimeType(ContentService.MimeType.JAVASCRIPT);
-  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
-}
-</textarea>
 <script src="./vendor/xlsx.min.js"></script>
 <script src="./mms-sharepoint.js"></script>
 <script>
@@ -1692,36 +1362,6 @@ $('#spBtn').addEventListener('click', async ()=>{
   btn.disabled = true; btn.textContent = '☁ 가져오는 중…';
   try { await pullFromSharePoint(true); } finally { btn.disabled = false; }   // 글자는 pullFromSharePoint 가 되돌린다
 });
-$('#linkBtn').addEventListener('click', async ()=>{
-  const c = await loadLink();
-  $('#linkUrl').value = c ? c.url : '';
-  $('#linkKey').value = c ? c.key : '';
-  setLinkStatus(c ? `연결됨${c.name ? ' — ' + c.name : ''}` : '');
-  $('#linkModal').classList.add('open');
-  $('#linkUrl').focus();
-});
-$('#linkClose').addEventListener('click', ()=>$('#linkModal').classList.remove('open'));
-$('#linkModal').addEventListener('click', e=>{ if(e.target===$('#linkModal')) $('#linkModal').classList.remove('open'); });
-$('#linkRemove').addEventListener('click', async ()=>{
-  await clearLink(); $('#linkUrl').value=''; $('#linkKey').value='';
-  setLinkStatus('연결을 끊었습니다. 받아둔 데이터는 그대로 있습니다.');
-});
-$('#linkCopyScript').addEventListener('click', async ()=>{
-  const code = $('#feedScript').value;
-  try { await navigator.clipboard.writeText(code); setLinkStatus('📋 스크립트를 복사했습니다. Apps Script 에 붙여넣으세요.'); }
-  catch (e) {
-    // 클립보드가 막힌 경우: 복사 창을 띄워 직접 Ctrl+C 하게 한다
-    $('#copyArea').value = code; $('#copyModal').classList.add('open');
-    $('#copyArea').focus(); $('#copyArea').select();
-  }
-});
-$('#linkSave').addEventListener('click', async ()=>{
-  const n = checkWebAppUrl($('#linkUrl').value);
-  if (n.error) { setLinkStatus('⚠ ' + n.error.split('\n')[0]); alert(n.error); return; }
-  const key = $('#linkKey').value.trim();
-  if (!key) { setLinkStatus('⚠ 열쇠를 넣어주세요.'); alert('열쇠를 넣어주세요.\n\nApps Script 에서 [설정] 을 실행하면 실행 로그에 나옵니다.'); return; }
-  await pullFromDrive({ url: n.url, key }, false);
-});
 $('#taxoBtn').addEventListener('click', ()=>$('#taxoInput').click());
 $('#taxoInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readTaxonomyFile(f); e.target.value=''; });
 $('#sampleBtn').addEventListener('click', ()=>{ RAW=makeSampleData(); window.__lastMapping='<b>샘플 데이터</b> (상품 6종 · 거래처 6곳)'; setupDims(); render('샘플 데이터 (상품 6종 · 거래처 6곳 · 약 18개월)'); });
@@ -1798,93 +1438,6 @@ async function pullFromSharePoint(interactive) {
   }
 }
 
-/* ---------- 구글 드라이브 연결 ----------
- * 드라이브 폴더의 판매현황 파일을 Apps Script 웹 앱이 읽어서 넘겨준다.
- * (드라이브 공유 링크는 다른 사이트에서 읽는 걸 구글이 막아 두어 직접은 못 가져온다)
- * 구매요청 대시보드와 같은 구조이며, 열쇠(key)로 막아 주소만으로는 받아갈 수 없다. */
-function checkWebAppUrl(raw) {
-  const u = String(raw || '').trim();
-  if (!u) return { error:'웹 앱 URL 을 붙여넣어 주세요.' };
-  if (/docs\.google\.com|drive\.google\.com/.test(u))
-    return { error:'드라이브·시트 주소가 아니라 Apps Script 웹 앱 URL 이 필요합니다.\n\n' +
-                   '[배포 → 새 배포 → 웹 앱] 후 나오는 https://script.google.com/macros/s/.../exec 를 넣어주세요.' };
-  if (!/^https:\/\/script\.google(usercontent)?\.com\/macros\//.test(u))
-    return { error:'Apps Script 웹 앱 URL 이 아닙니다.\n\nhttps://script.google.com/macros/s/... 로 시작해야 합니다.' };
-  if (!/\/exec\b/.test(u))
-    return { error:'주소가 /exec 로 끝나야 합니다.\n\n/dev 주소는 본인만 열 수 있어 쓸 수 없습니다.' };
-  return { url: u.split('?')[0] };
-}
-/* Apps Script 는 googleusercontent 로 한 번 넘기는데 그 과정에서 CORS 가 막히는 브라우저가 있다.
- * 구매요청 대시보드처럼 먼저 fetch 를 쓰고, 막히면 JSONP(script 태그)로 한 번 더 시도한다. */
-function jsonpGet(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const cb = '__sales_cb_' + Math.random().toString(36).slice(2);
-    const s = document.createElement('script');
-    const timer = setTimeout(() => { cleanup(); reject(new Error('응답이 없습니다(시간 초과).')); }, timeoutMs || 60000);
-    function cleanup() { clearTimeout(timer); delete window[cb]; s.remove(); }
-    window[cb] = (data) => { cleanup(); resolve(data); };
-    s.onerror = () => { cleanup(); reject(new Error('스크립트를 불러오지 못했습니다.')); };
-    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
-    document.head.appendChild(s);
-  });
-}
-async function askFeed(url, key, what) {
-  const q = `${url}?sales=${what}&key=${encodeURIComponent(key)}&t=${Date.now()}`;
-  let data = null;
-  try {
-    const res = await fetch(q, { method:'GET', mode:'cors', credentials:'omit', redirect:'follow', cache:'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    data = await res.json();
-  } catch (e) {
-    data = await jsonpGet(q);                 // CORS 로 막힌 경우
-  }
-  if (!data) throw new Error('빈 응답이 왔습니다.');
-  if (data.ok === false) throw new Error(data.error || '알 수 없는 오류');
-  return data;
-}
-async function pullFromDrive(conn, quiet) {
-  const { url, key } = conn;
-  try {
-    setLinkStatus('드라이브를 확인하는 중…');
-    const meta = await askFeed(url, key, 'meta');
-    // 파일 목록·수정시각이 그대로면 다시 받지 않는다(수만 행을 매번 내려받지 않도록)
-    if (conn.sig && meta.지문 === conn.sig && RAW.length) {
-      if (!quiet) setLinkStatus(`이미 최신입니다 — 파일 ${meta.files.length}개`);
-      return true;
-    }
-    setLinkStatus(`파일 ${meta.files.length}개 가져오는 중…`);
-    const full = await askFeed(url, key, 'data');
-
-    // 파일마다 열 구성이 다를 수 있어 파일별로 인식한 뒤 합친다
-    const all = [], notes = [];
-    for (const f of full.data) {
-      let got;
-      try { got = ingestRows(f.rows); }
-      catch (e) { notes.push(`${f.name} ⚠ ${e.message}`); continue; }
-      for (const r of got.data) r.company = f.company || '(미지정)';
-      all.push(...got.data);
-      notes.push(`${f.name} <b>${KRW.format(got.data.length)}건</b>`);
-    }
-    if (!all.length) throw new Error('읽을 수 있는 판매 데이터가 없습니다.\n' + notes.join('\n'));
-
-    all.sort((a, b) => a.date - b.date);
-    RAW = all;
-    const label = `드라이브 · 파일 ${full.data.length}개`;
-    window.__fname = label;
-    setupDims();
-    render('인식됨 — ' + notes.join(' · '), label);
-    await saveData(label);
-    showSavedNote(Date.now(), label);
-    await saveLink({ url, key, sig: full.지문, files: meta.files });
-    setLinkStatus(`✅ ${KRW.format(all.length)}건 · 파일 ${full.data.length}개를 가져왔습니다.`);
-    return true;
-  } catch (err) {
-    setLinkStatus('⚠ ' + err.message);
-    if (!quiet) alert('드라이브 가져오기 실패\n\n' + err.message);
-    return false;
-  }
-}
-function setLinkStatus(msg) { const el = $('#linkStatus'); if (el) el.textContent = msg || ''; }
 
 /* ---------- 분류기준 읽기 ----------
  * "상품분류" 시트에서 품목코드 · 품목명 · 상품분류 를,
@@ -2043,22 +1596,8 @@ function showSavedNote(savedAt, fname) {
   });
 }
 
-/* 연결 정보(웹 앱 주소·열쇠)도 같은 DB에 보관한다. 저장소에는 넣지 않는다. */
+/* 예전 '드라이브 연결' 정보(웹 앱 주소·열쇠)가 브라우저에 남아 있으면 지운다 — 이제 쉐어포인트만 쓴다 */
 const LINK_KEY = 'driveLink';
-async function saveLink(conn) {
-  try { const db = await idbOpen();
-    await new Promise(res => { const tx = db.transaction(STORE,'readwrite');
-      tx.objectStore(STORE).put({ ...conn, savedAt: Date.now() }, LINK_KEY); tx.oncomplete = res; });
-    db.close();
-  } catch (e) { console.warn('연결 정보 보관 실패:', e); }
-}
-async function loadLink() {
-  try { const db = await idbOpen();
-    const got = await new Promise((res, rej) => { const tx = db.transaction(STORE,'readonly');
-      const q = tx.objectStore(STORE).get(LINK_KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
-    db.close(); return (got && got.url && got.key) ? got : null;
-  } catch (e) { return null; }
-}
 async function clearLink() {
   try { const db = await idbOpen();
     await new Promise(res => { const tx = db.transaction(STORE,'readwrite');
@@ -2102,6 +1641,7 @@ async function clearTaxonomy() {
 
 /* ---------- 시작 ---------- */
 (async () => {
+  clearLink();   // 예전 드라이브 연결 정보 정리 (없으면 아무 일 없음)
   // 분류기준을 판매 데이터보다 먼저 올려야 처음 그릴 때부터 분류가 맞는다
   const taxo = await loadTaxonomy();
   const saved = await loadSavedData();
@@ -2111,19 +1651,15 @@ async function clearTaxonomy() {
     setupDims();
     render(null, saved.fname);
     showSavedNote(saved.savedAt, saved.fname);
-    // 드라이브를 연결해 뒀다면 백그라운드로 최신 파일을 받아 덮어쓴다.
-    // 실패해도 보관본이 이미 그려져 있으므로 조용히 넘어간다.
+    // 쉐어포인트를 연결해 뒀다면 백그라운드로 최신 파일을 받아 덮어쓴다.
+    // 실패해도 보관본이 이미 그려져 있으므로 버튼에 '다시 연결'만 표시한다.
     const sp = spState();
-    if (sp && sp.on) { pullFromSharePoint(false); return; }   // 쉐어포인트 연결 중이면 드라이브는 보지 않는다
-    const conn = await loadLink();
-    if (conn) pullFromDrive(conn, true);
+    if (sp && sp.on) pullFromSharePoint(false);
   } else {
     const sp = spState();
     if (sp && sp.on && await pullFromSharePoint(false)) return;
-    const conn = await loadLink();
-    if (conn && await pullFromDrive(conn, true)) return;   // 연결돼 있으면 샘플 대신 드라이브를 쓴다
     RAW = makeSampleData();
-    window.__lastMapping = '<b>샘플 데이터</b> — 상단의 “엑셀/CSV 업로드”로 이카운트 판매현황 파일을 올려보세요.';
+    window.__lastMapping = '<b>샘플 데이터</b> — 상단의 “☁ 쉐어포인트”를 누르면 두 회사 판매현황(2022년~)을 받아옵니다.';
     setupDims();
     render('샘플 데이터 (상품 6종 · 거래처 6곳 · 약 18개월)');
   }
