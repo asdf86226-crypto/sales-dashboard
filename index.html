@@ -1010,12 +1010,21 @@ function renderItemQuarter() {
 
   renderVBars('#itemQuarterChart', recent3.map(m => ({ label:m.label, qty:qtyOf(m) })));
 
-  // 추세비 = 최근 3개월 월평균 ÷ 직전 6개월 월평균 (안정성을 위해 0.5~2.0로 제한)
-  let ratio = p6avg > 0 ? r3avg / p6avg : 1;
-  const ratioRaw = ratio;
-  ratio = Math.min(2, Math.max(0.5, ratio));
-  const nextMonth = Math.round(r3avg * ratio);
-  const next3 = nextMonth * 3;
+  // 예상 필요량 — 구매요청 대시보드 '발주 필요'의 월 예측과 같은 방식:
+  //   지난 12개월(기준월 제외) 가중평균 — 최근 1~3개월 ×3, 4~6개월 ×2, 7~12개월 ×1
+  //   꾸준히 팔리는 품목(8개월 이상 판매)에서 한 달이 나머지 달 평균의 3배를 넘고 1년의 30% 이상이면
+  //   대량 거래로 보고 그 달은 나머지 달 평균으로 바꿔 계산한다.
+  let v12 = Array.from({length:12}, (_, i) => qtyOf(monthBack(ref, i+1)));
+  const tot12 = v12.reduce((a,b)=>a+b,0);
+  let spike = null;
+  if (tot12 > 0) {
+    const mx = Math.max(...v12), k = v12.indexOf(mx), rest = (tot12 - mx) / 11;
+    if (mx > 3*rest && mx >= 0.3*tot12 && v12.filter(x=>x>0).length >= 8) { spike = monthBack(ref, k+1).label; v12 = v12.slice(); v12[k] = rest; }
+  }
+  const wts = v12.map((_, i) => i < 3 ? 3 : (i < 6 ? 2 : 1)), W = wts.reduce((a,b)=>a+b,0);
+  const fc = v12.reduce((a,x,i)=>a + x*wts[i], 0) / W;
+  const nextMonth = Math.round(fc);
+  const next3 = Math.round(fc * 3);
   // 예상 대상 기간: 기준월부터 3개월 (기준월은 아직 진행 중이므로 포함)
   const nextMonths = [0,1,2].map(i => monthBack(ref, -i));
   const nextLabels = `${nextMonths[0].label}~${nextMonths[2].label}`;
@@ -1038,10 +1047,11 @@ function renderItemQuarter() {
     <div class="stat-row accent">
       <div class="k">다음 3개월 예상 필요량</div>
       <div class="v">${KRW.format(next3)}<span class="u">개</span></div>
-      <div class="sub">월평균 약 ${KRW.format(nextMonth)}개 기준 · ${nextLabels}</div>
+      <div class="sub">월 예측 약 ${KRW.format(nextMonth)}개 (12개월 가중평균) · ${nextLabels}</div>
     </div>
     <div class="stat-note">
-      예상치 = 최근 3개월 월평균 × 추세비(최근 3개월 ÷ 직전 6개월 = ${ratioRaw.toFixed(2)}${ratioRaw !== ratio ? ` → ${ratio.toFixed(2)}로 제한` : ''}).
+      예상치 = 지난 12개월(${monthBack(ref,12).label}~${monthBack(ref,1).label}) 가중평균 × 3개월 — 최근 1~3개월 ×3 · 4~6개월 ×2 · 7~12개월 ×1.
+      구매요청 대시보드 '발주 필요'의 월 예측과 같은 방식입니다${spike ? ` · <b>${spike}</b>은 대량 거래 달로 보고 나머지 달 평균으로 바꿔 계산` : ''}.
       ${p6cov < 6 ? `<br>직전 6개월 중 <b>${p6cov}개월</b>만 데이터에 포함되어 그 개월로 평균했습니다.` : ''}
     </div>`;
 }
